@@ -14,4 +14,21 @@ yuk= float(input("Yük ağırlığı (kg): "))
 toplam = bos + batarya + yuk
 w= toplam * 9.81  # Ağırlık kuvveti (N)
 
-print("Toplam Ağırlık (N):", w)
+print("Total weight :", w)
+
+
+#Lift (Kaldırma) Kuvveti
+
+wing_span = float(input("Wing span (m): "))  
+velocity = float(input("Velocity (m/s): ")) 
+cl = float(input("Lift coefficient (Cl): "))
+
+Lift= 0.5 * r * velocity ** 2 * wing_span * cl
+print("Lift(N):", Lift, "N")
+
+
+#Drag (Sürükleme) Kuvveti
+cd = float(input("Drag coefficient (Cd): "))
+Drag= 0.5 * r * velocity ** 2 * cd
+print("Drag(N):", Drag, "N")
+
