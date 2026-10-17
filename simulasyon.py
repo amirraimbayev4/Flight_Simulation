@@ -68,9 +68,10 @@ if aircraft_type == "1":
             print(f"  -> ISSUE: Insufficient Lift Force! Short by {w - Lift:.2f} N.")
             print("     FIX  : Increase wing span, chord length, or velocity.")
         if not is_speed_safe:
-            print(f"  -> ISSUE: STALL RISK! Your speed is below the minimum required speed.")
-            print(f"     FIX  : Increase your velocity to at least {v_stall:.2f} m/s.")
-            
+            print(f"  -> ISSUE: STALL RISK! Your speed ({velocity:.2f} m/s) is below the minimum safety limit.")
+            # İşte buraya hem m/s hem de km/h cinsinden stall limitini yazdırıyoruz:
+            print(f"     REQUIRED: You must fly at least {v_stall:.2f} m/s ({v_stall * 3.6:.1f} km/h) to stay in the air.")
+            print("     FIX     : Increase your 'Velocity' input above this limit.")
         print("\n-> Time & Range calculations bypassed due to critical flight failure.")
         print("=" * 45)
 
@@ -131,7 +132,7 @@ if aircraft_type == "1":
 
 
 
-  # Terminali açık tutma kodu elektrikli if bloğunun sonunda kalabilir
+    # Terminali açık tutma kodu elektrikli if bloğunun sonunda kalabilir
     input("\nPress Enter to exit the simulator...")
 
 elif aircraft_type == "2":
