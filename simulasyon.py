@@ -34,6 +34,16 @@ cd = float(input("Drag coefficient (Cd): "))
 Drag= 0.5 * r * velocity ** 2 * wing_area * cd
 print("Drag(N):", Drag, "N")
 
+#Required Power (Gerekli Güç)
+required_power = Drag * velocity  # Gerekli güç (W)
+print("Required Power (W):", required_power, "W")
+
+efficiency = 0.70  # %70 System efficiency constant
+
+# Total Electrical Power drawn from battery (Watts)
+power_electrical = required_power / efficiency
+
+print("Total Electrical Power drawn from battery (W):", power_electrical, "W")
 
 
 
