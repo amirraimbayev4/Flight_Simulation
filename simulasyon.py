@@ -6,3 +6,12 @@ rho = 1.225  # Hava yoğunluğu (kg/m^3)
 irtifa=float(input("İrtifa (m): "))
 r=  1.225 * (1 - 0.00002256 * irtifa) ** 4.256
 print("Hava yoğunluğu (kg/m^3):", r)
+
+#2. Aerodinamik Kuvvet Denklemleri (Dört Büyük Kuvvet)
+bos= float(input("Boş ağırlık (kg): "))
+batarya= float(input("Batarya ağırlığı (kg): "))
+yuk= float(input("Yük ağırlığı (kg): "))
+toplam = bos + batarya + yuk
+w= toplam * 9.81  # Ağırlık kuvveti (N)
+
+print("Toplam Ağırlık (N):", w)
