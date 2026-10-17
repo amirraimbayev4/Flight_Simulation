@@ -130,6 +130,30 @@ if aircraft_type == "1":
         print(f"Estimated Max Range   : {range_km:.2f} km")
         print("=" * 40)
 
+         # ==============================================================================
+        # FLUID MECHANICS & PRESSURE LAYER (EN SONDA RAPORLAMA)
+        # ==============================================================================
+        print("\n" + "-" * 40)
+        print("       FLUID MECHANICS & PRESSURE REPORT       ")
+        print("-" * 40)
+        
+        # 1. Dynamic Pressure (q = 0.5 * r * V^2)
+        dynamic_pressure = 0.5 * r * velocity ** 2
+        print(f"-> Dynamic Pressure (q)       : {dynamic_pressure:.2f} Pa")
+        
+        # 2. Mach Number (M = V / a)
+        speed_of_sound = 340.29  
+        mach_number = velocity / speed_of_sound
+        print(f"-> Mach Number (M)            : {mach_number:.4f}")
+        
+        # Sıkıştırılabilirlik kontrolü (Akademik Yorum)
+        if mach_number < 0.3:
+            print("   * Compressibility          : Subsonic (Incompressible)")
+        else:
+            print("   * Compressibility          : Subsonic (Compressible effects starting)")
+        print("=" * 40)
+
+
 
 
     # Terminali açık tutma kodu elektrikli if bloğunun sonunda kalabilir
