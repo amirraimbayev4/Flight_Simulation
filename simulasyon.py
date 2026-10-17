@@ -6,17 +6,17 @@ rho = 1.225  # Hava yoğunluğu (kg/m^3)
 print("\n" + "=" * 45)
 print("       ENVIRONMENT & ATMOSPHERE LAYER       ")
 print("=" * 45)
-irtifa=float(input("İrtifa (m): "))
-r=  1.225 * (1 - 0.00002256 * irtifa) ** 4.256
+altitude=float(input("Altitude (m): "))
+r=  1.225 * (1 - 0.00002256 * altitude) ** 4.256
 print(f"-> Air Density (\u03c1) : {r:.4f} kg/m^3")
 print("-" * 45)
 
 #2. Aerodinamik Kuvvet Denklemleri (Dört Büyük Kuvvet)
 print("          AIRCRAFT MASS & WEIGHT            ")
 print("-" * 45)
-bos= float(input("Boş ağırlık (kg): "))
-batarya= float(input("Batarya ağırlığı (kg): "))
-yuk= float(input("Yük ağırlığı (kg): "))
+bos= float(input("Empty weight (kg): "))
+batarya= float(input("Battery weight (kg): "))
+yuk= float(input("Payload weight (kg): "))
 toplam = bos + batarya + yuk
 w= toplam * 9.81  # Ağırlık kuvveti (N)
 
@@ -82,3 +82,6 @@ range_km = velocity * flight_time_hours *3.6 # Menzil (km)
 
 print(f"Estimated Max Range   : {range_km:.2f} km")
 print("=" * 40)
+
+# Keep the terminal window open until user presses Enter
+input("\nPress Enter to exit the simulator...")
