@@ -5,14 +5,14 @@ import math
 print("=============================================")
 print("          AIRCRAFT PROPULSION TYPE           ")
 print("=============================================")
-print("1. Electric (UAV / Battery Powered)")
-print("2. Fuel / Jet Engine (Kerosene Powered)")
+print("1. Electric (UAV / Battery Powered)")#There are different equations for electric and fuel aircrafts, so we need to select the type first
+print("2. Fuel / Jet Engine (Kerosene Powered)")#First I will finish the electric one then I will implement the fuel one
 aircraft_type = input("Choose aircraft type (1 or 2): ").strip()
 print("=" * 45)
 
 if aircraft_type == "1":
     print("You have selected Electric Aircraft (UAV / Battery Powered).")
-    print("=" * 45) 
+    print("=" * 45) #This one is really useful for separating sections in the terminal output, makes it more readable
     #Çevre ve Atmosfer Değerleri
     rho = 1.225  # Hava yoğunluğu (kg/m^3)
     #İrtifaya göre hava yoğunluğu değişimi için standart atmosfer modeli kullanılabilir. Ancak basitlik açısından sabit bir değer kullanıyoruz
@@ -49,57 +49,93 @@ if aircraft_type == "1":
 
     Lift= 0.5 * r * velocity ** 2 * wing_area * cl
 
+    #Stall speed hesaplaması
+    cl_max=1.5  # Maximum lift coefficient (Cl_max) for typical UAVs
+    v_stall= math.sqrt((2 * w) / (r * wing_area * cl_max))  # Stall speed (m/s)
+
+     # 3. İLK BÜYÜK KONTROL: Uçak fiziksel olarak kalkabiliyor mu?
+    is_lift_enough = Lift >= w    #There is no need to calculate range and power if the lift is not enough to lift the aircraft, so we check this first
+    is_speed_safe = velocity >= v_stall
+
+    if not (is_lift_enough and is_speed_safe):
+        # EĞER UÇAK UÇAMIYORSA: Menzil ve Güç hesaplarını pas geçip direkt rapor veriyoruz!
+        print("\n" + "=" * 45)
+        print("FLIGHT STATUS: FAILED! ❌ The aircraft CANNOT fly.")
+        print("=" * 45)
+        print("[DIAGNOSTIC REPORT & FIXES]:")
+        
+        if not is_lift_enough:
+            print(f"  -> ISSUE: Insufficient Lift Force! Short by {w - Lift:.2f} N.")
+            print("     FIX  : Increase wing span, chord length, or velocity.")
+        if not is_speed_safe:
+            print(f"  -> ISSUE: STALL RISK! Your speed is below the minimum required speed.")
+            print(f"     FIX  : Increase your velocity to at least {v_stall:.2f} m/s.")
+            
+        print("\n-> Time & Range calculations bypassed due to critical flight failure.")
+        print("=" * 45)
+
+    else:
+        # EĞER UÇAK GÜVENLİCE UÇUYORSA: Artık menzil ve güç hesaplayabiliriz!
+        print("\n" + "=" * 45)
+        print("FLIGHT STATUS: SUCCESS! 🛫 Safe takeoff conditions met.")
+        print("=" * 45)
+
+        #Drag (Sürükleme) Kuvveti
+
+        cd = float(input("Drag coefficient (Cd): "))
+        Drag= 0.5 * r * velocity ** 2 * wing_area * cd
 
 
-    #Drag (Sürükleme) Kuvveti
-    cd = float(input("Drag coefficient (Cd): "))
-    Drag= 0.5 * r * velocity ** 2 * wing_area * cd
+        print("-" * 45)
+        print(f"-> Generated Lift Force (L)  : {Lift:.2f} N")
+        print(f"-> Generated Drag Force (D)  : {Drag:.2f} N")
+        print("-" * 45)
+
+        #Required Power (Gerekli Güç)
+        required_power = Drag * velocity  # Gerekli güç (W)
+        print("        PROPULSION & POWER CONSUMPTION       ")
+        print("-" * 45)
 
 
-    print("-" * 45)
-    print(f"-> Generated Lift Force (L)  : {Lift:.2f} N")
-    print(f"-> Generated Drag Force (D)  : {Drag:.2f} N")
-    print("-" * 45)
+        efficiency = 0.70  # %70 System efficiency constant
 
-    #Required Power (Gerekli Güç)
-    required_power = Drag * velocity  # Gerekli güç (W)
-    print("        PROPULSION & POWER CONSUMPTION       ")
-    print("-" * 45)
+        # Total Electrical Power drawn from battery (Watts)
+        power_electrical = required_power / efficiency
+
+        print(f"-> Required Aerodynamic Power : {required_power:.2f} W")
+        print(f"-> Total Electrical Power Draw: {power_electrical:.2f} W")
 
 
-    efficiency = 0.70  # %70 System efficiency constant
+        # 5. Flight Time (Endurance) and Range Calculations
+        print("-" * 40)
+        print("          TIME & RANGE CALCULATIONS          ")
+        print("-" * 40)
 
-    # Total Electrical Power drawn from battery (Watts)
-    power_electrical = required_power / efficiency
+        #kullanıcıdan batarya kapasitesi alıyoruz
+        battery_capacity_wh = float(input("Battery capacity (Wh): "))
 
-    print(f"-> Required Aerodynamic Power : {required_power:.2f} W")
-    print(f"-> Total Electrical Power Draw: {power_electrical:.2f} W")
+        flight_time_hours = battery_capacity_wh / power_electrical  # Uçuş süresi (saat)
+        flight_time_minutes = flight_time_hours * 60  # Uçuş süresi (dakika)
+        #Stall speed hesaplaması
+        cl_max=1.5  # Maximum lift coefficient (Cl_max) for typical UAVs
+        
+
+        print(f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)")
+        print(f"Estimated Stall Speed : {v_stall:.2f} m/s")
+
+        #Menzil Hesaplaması
+        range_km = velocity * flight_time_hours *3.6 # Menzil (km)
+
+        print(f"Estimated Max Range   : {range_km:.2f} km")
+        print("=" * 40)
 
 
-    # 5. Flight Time (Endurance) and Range Calculations
-    print("-" * 40)
-    print("          TIME & RANGE CALCULATIONS          ")
-    print("-" * 40)
 
-    #kullanıcıdan batarya kapasitesi alıyoruz
-    battery_capacity_wh = float(input("Battery capacity (Wh): "))
-
-    flight_time_hours = battery_capacity_wh / power_electrical  # Uçuş süresi (saat)
-    flight_time_minutes = flight_time_hours * 60  # Uçuş süresi (dakika)
-
-
-    print(f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)")
-
-    #Menzil Hesaplaması
-    range_km = velocity * flight_time_hours *3.6 # Menzil (km)
-
-    print(f"Estimated Max Range   : {range_km:.2f} km")
-    print("=" * 40)
-
-    # Keep the terminal window open until user presses Enter
+  # Terminali açık tutma kodu elektrikli if bloğunun sonunda kalabilir
     input("\nPress Enter to exit the simulator...")
-
 
 elif aircraft_type == "2":
     print("You have selected Fuel / Jet Engine Aircraft (Kerosene Powered).")
     print("=" * 45)
+    # Yakıtlı mod kodları ileride buraya gelecek
+    input("\nPress Enter to exit the simulator...")
