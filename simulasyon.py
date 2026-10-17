@@ -19,16 +19,21 @@ print("Total weight :", w)
 
 #Lift (Kaldırma) Kuvveti
 
-wing_span = float(input("Wing span (m): "))  
+wing_span = float(input("Wing span (m): "))
+chord = float(input("Chord length (m): ")) 
 velocity = float(input("Velocity (m/s): ")) 
 cl = float(input("Lift coefficient (Cl): "))
+wing_area = wing_span * chord  # Kanat alanı (m^2)
 
-Lift= 0.5 * r * velocity ** 2 * wing_span * cl
+Lift= 0.5 * r * velocity ** 2 * wing_area * cl
 print("Lift(N):", Lift, "N")
 
 
 #Drag (Sürükleme) Kuvveti
 cd = float(input("Drag coefficient (Cd): "))
-Drag= 0.5 * r * velocity ** 2 * cd
+Drag= 0.5 * r * velocity ** 2 * wing_area * cd
 print("Drag(N):", Drag, "N")
+
+
+
 
