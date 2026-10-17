@@ -20,7 +20,7 @@ class FlightSimulatorGUI(ctk.CTk):
         self.title_label = ctk.CTkLabel(
             self, 
             text="AIRCRAFT PERFORMANCE & AERODYNAMICS SIMULATOR", 
-            font=ctk.CTkFont(family="Helvetica", size=24, weight="bold"),
+            font=ctk.CTkFont(family="Helvetica", size=24, weight="normal"),
             text_color="#3B82F6" 
         )
         self.title_label.pack(padx=20, pady=25)
@@ -73,7 +73,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
         # Gelişmiş girdileri oluşturuyoruz (İlk başta gizli)
         for label_text, placeholder_val in self.advanced_fields:
-            lbl = ctk.CTkLabel(self.input_frame, text=label_text, font=ctk.CTkFont(size=13, weight="bold", text_color="#FBBF24"))
+            lbl = ctk.CTkLabel(self.input_frame, text=label_text, text_color="#FBBF24", font=ctk.CTkFont(size=13, weight="bold"))
             entry = ctk.CTkEntry(self.input_frame, width=160, border_color="#FBBF24", placeholder_text=placeholder_val)
             
             self.labels[label_text] = lbl
