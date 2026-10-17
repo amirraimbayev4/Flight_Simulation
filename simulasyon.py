@@ -152,6 +152,55 @@ if aircraft_type == "1":
         else:
             print("   * Compressibility          : Subsonic (Compressible effects starting)")
         print("=" * 40)
+                # ==============================================================================
+        # ADVANCED FLUID MECHANICS, AERODYNAMICS & PROPULSION REPORT
+        # ==============================================================================
+        print("\n" + "=" * 45)
+        print("   ADVANCED AERODYNAMICS & FLUID MECHANICS   ")
+        print("=" * 45)
+        
+        # 1. Atmospheric & Bernoulli Pressure Calculations
+        p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
+        dynamic_pressure = 0.5 * r * velocity ** 2
+        p_total = p_static + dynamic_pressure
+        cp_difference = cl / 2
+        
+        print(f"-> Static Ambient Pressure   : {p_static:.2f} Pa")
+        print(f"-> Dynamic Pressure (q)       : {dynamic_pressure:.2f} Pa")
+        print(f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa")
+        print(f"-> Mean Pressure Coeff (Cp)  : {cp_difference:.4f}")
+        print("-" * 45)
+        
+        # 2. Drag Polar & Total Drag Breakdown
+        aspect_ratio = wing_span / chord
+        cd_induced = (cl ** 2) / (math.pi * aspect_ratio * 0.85)
+        cd_parasite = cd - cd_induced
+        
+        print(f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}")
+        print(f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}")
+        print(f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}")
+        print("-" * 45)
+        
+        # 3. Aerodynamic Similarity & Speed of Sound
+        mu = 1.789e-5
+        reynolds = (r * velocity * chord) / mu
+        speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude)) # İrtifaya göre gerçek ses hızı
+        mach_number = velocity / speed_of_sound
+        
+        print(f"-> Reynolds Number (Re)      : {reynolds:.1f}")
+        if reynolds < 500000:
+            print("   * Flow Regime              : Laminar Flow")
+        else:
+            print("   * Flow Regime              : Turbulent Flow")
+            
+        print(f"-> Local Speed of Sound (a)  : {speed_of_sound:.2f} m/s")
+        print(f"-> Mach Number (M)            : {mach_number:.4f}")
+        print("-" * 45)
+        
+        # 4. Propulsion & Thrust Force
+        thrust_cruise = Drag
+        print(f"-> Cruise Thrust Required (T): {thrust_cruise:.2f} N")
+        print("=============================================")
 
 
 
