@@ -10,7 +10,7 @@ class FlightSimulatorGUI(ctk.CTk):
         super().__init__()
 
         # Pencere Kimliği ve Genişletilmiş Boyutlar
-        self.title("NTHU Aerospace Technology - Flight Dynamics Simulator v1.1")
+        self.title("Aerospace Technology - Flight Dynamics Simulator v1.1")
         self.geometry("1150x820")  
         self.resizable(False, False) 
 
@@ -167,66 +167,84 @@ class FlightSimulatorGUI(ctk.CTk):
                     report += f"     REQUIRED: Fly at least {v_stall:.2f} m/s ({v_stall * 3.6:.1f} km/h).\n"
                 report += "\n-> Advanced parameters (Cd, Wh) locked due to flight failure.\n"
                 report += "=============================================\n"
-            
-            # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)
+
+                        # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)    
             else:
+                # 1. Başarı mesajını rapora ekle
+                report += "=============================================\n"
+                report += "FLIGHT STATUS: SUCCESS! 🛫 Modelled steady-flight checks passed.\n"
+                report += "=============================================\n"
+                
+                # 2. Gizli kutuları ekrana çiz (grid et)
                 start_row = len(self.basic_fields)
                 for field, _ in self.advanced_fields:
                     self.labels[field].grid(row=start_row, column=0, padx=20, pady=10, sticky="w")
                     self.entries[field].grid(row=start_row, column=1, padx=20, pady=10, sticky="e")
                     start_row += 1
 
-                # Şimdi o yeni açılan kutulardaki değerleri güvenle okuyoruz
-                cd = float(self.entries["Drag Coefficient (Cd)"].get())
-                battery_capacity_wh = float(self.entries["Battery Capacity (Wh)"].get())
+                # 3. Grafik motorunu anlık tazele ki kutular ekranda hemen görünsün
+                self.update_idletasks()
 
-                report += "\n=============================================\n"
-                report += "FLIGHT STATUS: SUCCESS! \ud83d\udeeb Safe takeoff conditions met.\n"
-                report += "=============================================\n"
-                report += "-> Advanced inputs unlocked! Feel free to modify Cd and Wh.\n"
-                report += "---------------------------------------------\n"
-                
-                Drag = 0.5 * r * (velocity ** 2) * wing_area * cd
-                required_power = Drag * velocity
-                efficiency = 0.70
-                power_electrical = required_power / efficiency
-                
-                flight_time_hours = battery_capacity_wh / power_electrical
-                flight_time_minutes = flight_time_hours * 60
-                range_km = velocity * flight_time_hours * 3.6
-                report += f"-> Generated Lift Force (L)  : {Lift:.2f} N\n"
-                report += f"-> Generated Drag Force (D)  : {Drag:.2f} N\n"
-                report += f"-> Total Electrical Power Draw: {power_electrical:.2f} W\n"
-                report += "---------------------------------------------\n"
-                report += "          TIME & RANGE CALCULATIONS          \n"
-                report += "---------------------------------------------\n"
-                report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
-                report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
-                report += f"Estimated Max Range   : {range_km:.2f} km\n"
-                # ADVANCED FLUID MECHANICS REPORT
-                report += "\n=============================================\n"
-                report += "   ADVANCED AERODYNAMICS & FLUID MECHANICS   \n"
-                report += "=============================================\n"
-                p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
-                p_total = p_static + (0.5 * r * velocity ** 2)
-                cp_difference = cl / 2
-                aspect_ratio = wing_span / chord
-                cd_induced = (cl ** 2) / (math.pi * aspect_ratio * 0.85)
-                cd_parasite = cd - cd_induced
-                mu = 1.789e-5
-                reynolds = (r * velocity * chord) / mu
-                speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
-                mach_number = velocity / speed_of_sound
-                report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
-                report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
-                report += f"-> Mean Pressure Coeff (Cp)  : {cp_difference:.4f}\n"
-                report += f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}\n"
-                report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
-                report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
-                report += f"-> Reynolds Number (Re)      : {reynolds:.1f}\n"
-                report += f"-> Mach Number (M)            : {mach_number:.4f}\n"
-                report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
-                report += "=============================================\n"
+                # 🚨 AKILLI KONTROL: Eğer yeni açılan kutular henüz boşsa, programın hata verip 
+                # çökmesini engellemek için kullanıcıya rehber bir mesaj basıp burada duruyoruz (Erken Çıkış).
+                if self.entries["Drag Coefficient (Cd)"].get() == "" or self.entries["Battery Capacity (Wh)"].get() == "":
+                    report += "-> Advanced parameters (Cd, Wh) have been unlocked below!\n"
+                    report += "-> ACTION REQUIRED: Please enter values for Cd and Wh in the left panel,\n"
+                    report += "   then press 'RUN FLIGHT SIMULATION' again for full analytics.\n"
+                    report += "=============================================\n"
+                else:#Bu kısımda yapay zeka ve internetten yardım aldım. Tasarım konusunda çok fazla zaman kaybı yaşamak istemedim.
+                    # Eğer kutular doluysa (yani butona ikinci kez basılıyorsa) tüm formülleri güvenle hesapla:
+                    cd = float(self.entries["Drag Coefficient (Cd)"].get())
+                    battery_capacity_wh = float(self.entries["Battery Capacity (Wh)"].get())
+                    
+                    report += "-> Advanced inputs loaded successfully! Generating full report...\n"
+                    report += "---------------------------------------------\n"
+                    
+                    Drag = 0.5 * r * (velocity ** 2) * wing_area * cd
+                    required_power = Drag * velocity
+                    efficiency = 0.70
+                    power_electrical = required_power / efficiency
+                    
+                    flight_time_hours = battery_capacity_wh / power_electrical
+                    flight_time_minutes = flight_time_hours * 60
+                    range_km = velocity * flight_time_hours * 3.6
+
+                    report += f"-> Generated Lift Force (L)  : {Lift:.2f} N\n"
+                    report += f"-> Generated Drag Force (D)  : {Drag:.2f} N\n"
+                    report += f"-> Total Electrical Power Draw: {power_electrical:.2f} W\n"
+                    report += "---------------------------------------------\n"
+                    report += "          TIME & RANGE CALCULATIONS          \n"
+                    report += "---------------------------------------------\n"
+                    report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
+                    report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
+                    report += f"Estimated Max Range   : {range_km:.2f} km\n"
+                    
+                    # ADVANCED FLUID MECHANICS REPORT
+                    report += "\n=============================================\n"
+                    report += "   ADVANCED AERODYNAMICS & FLUID MECHANICS   \n"
+                    report += "=============================================\n"
+                    p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
+                    p_total = p_static + (0.5 * r * velocity ** 2)
+                    cp_difference = cl / 2
+                    aspect_ratio = wing_span / chord
+                    cd_induced = (cl ** 2) / (math.pi * aspect_ratio * 0.85)
+                    cd_parasite = cd - cd_induced
+                    mu = 1.789e-5
+                    reynolds = (r * velocity * chord) / mu
+                    speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
+                    mach_number = velocity / speed_of_sound
+
+                    report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
+                    report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
+                    report += f"-> Mean Pressure Coeff (Cp)  : {cp_difference:.4f}\n"
+                    report += f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}\n"
+                    report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
+                    report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
+                    report += f"-> Reynolds Number (Re)      : {reynolds:.1f}\n"
+                    report += f"-> Mach Number (M)            : {mach_number:.4f}\n"
+                    report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
+                    report += "=============================================\n"
+
 
             # Ekrana Raporu Basma
             self.output_text.configure(state="normal")
