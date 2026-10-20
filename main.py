@@ -12,7 +12,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
         # Pencere Kimliği ve Genişletilmiş Boyutlar
         self.title("Aerospace Technology - Flight Dynamics Simulator v1.2")
-        self.geometry("1380x1020")  
+        self.geometry("1200x720")  
         self.resizable(False, False) 
 
         # ==============================================================================
@@ -60,7 +60,7 @@ class FlightSimulatorGUI(ctk.CTk):
         # SOL PANEL: GİRDİLER (INPUT PANEL)
         # ------------------------------------------------------------------------------
         self.input_frame = ctk.CTkScrollableFrame(self.main_container, width=480, label_text="AIRCRAFT & ENVIRONMENT INPUTS")
-        self.input_frame.pack(side="left", fill="both", expand=True, padx=(0, 15), pady=10)
+        self.input_frame.pack(side="left", fill="y", expand=False, padx=(0, 15), pady=10)
 
         self.entries = {}
         self.labels = {}
@@ -80,7 +80,8 @@ class FlightSimulatorGUI(ctk.CTk):
         # Gelişmiş Girdiler (Başlangıçta gizli)
         self.advanced_fields = [
             ("Drag Coefficient (Cd)", "e.g., 0.042"),
-            ("Battery Capacity (Wh)", "e.g., 450")
+            ("Battery Capacity (Wh)", "e.g., 450"),
+            ("Propulsion Efficiency (0-1)", "e.g., 0.70"),
         ]
 
         # Temel girdileri ekrana çiziyoruz
@@ -106,7 +107,7 @@ class FlightSimulatorGUI(ctk.CTk):
         # ------------------------------------------------------------------------------
         # SAĞ PANEL: DIJITAL EKRAN (OUTPUT PANEL)
         # ------------------------------------------------------------------------------
-        self.output_frame = ctk.CTkFrame(self.main_container, width=720)
+        self.output_frame = ctk.CTkFrame(self.main_container, width=1000)
         self.output_frame.pack(side="right", fill="both", expand=True, padx=(15, 0), pady=10)
 
         self.output_title = ctk.CTkLabel(self.output_frame, text="FLIGHT REPORT", font=ctk.CTkFont(size=16, weight="bold"), text_color="#FBBF24")
@@ -151,7 +152,8 @@ class FlightSimulatorGUI(ctk.CTk):
                 "Velocity (m/s)": "20",         # 18 -> 20 m/s yapıldı
                 "Lift Coefficient (Cl)": "0.65",# 0.55 -> 0.65 yapıldı
                 "Drag Coefficient (Cd)": "0.035",
-                "Battery Capacity (Wh)": "300"
+                "Battery Capacity (Wh)": "300",
+                "Propulsion Efficiency (0-1)": "0.70"
             },
             "Electric Glider (Planör)": {
                 "Altitude (m)": "500",
@@ -163,7 +165,8 @@ class FlightSimulatorGUI(ctk.CTk):
                 "Velocity (m/s)": "15",
                 "Lift Coefficient (Cl)": "0.80",
                 "Drag Coefficient (Cd)": "0.020",
-                "Battery Capacity (Wh)": "150"
+                "Battery Capacity (Wh)": "150",
+                "Propulsion Efficiency (0-1)": "0.70"
             }
         }
 
@@ -278,7 +281,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
                 self.update_idletasks()
 
-                if self.entries["Drag Coefficient (Cd)"].get() == "" or self.entries["Battery Capacity (Wh)"].get() == "":
+                if self.entries["Drag Coefficient (Cd)"].get() == "" or self.entries["Battery Capacity (Wh)"].get() == "" or self.entries["Propulsion Efficiency (0-1)"].get() == "":
                     report += "-> Advanced parameters (Cd, Wh) have been unlocked below!\n"
                     report += "-> ACTION REQUIRED: Please enter values for Cd and Wh in the left panel,\n"
                     report += "   then press 'RUN FLIGHT SIMULATION' again for full analytics.\n"
@@ -286,63 +289,71 @@ class FlightSimulatorGUI(ctk.CTk):
                 else:
                     cd = float(self.entries["Drag Coefficient (Cd)"].get())
                     battery_capacity_wh = float(self.entries["Battery Capacity (Wh)"].get())
+                    propulsion_efficiency = float(self.entries["Propulsion Efficiency (0-1)"].get())
                     
-                    report += "-> Advanced inputs loaded successfully! Generating full report...\n"
-                    report += "---------------------------------------------\n"
-                    
-                    Drag = 0.5 * r * (velocity ** 2) * wing_area * cd
-                    required_power = Drag * velocity
-                    efficiency = 0.70
-                    power_electrical = required_power / efficiency
-                    
-                    flight_time_hours = battery_capacity_wh / power_electrical
-                    flight_time_minutes = flight_time_hours * 60
-                    range_km = velocity * flight_time_hours * 3.6
+                    if not (0 < propulsion_efficiency <= 1):
+                                            report += "-> ERROR: Propulsion efficiency must be between 0 and 1 (e.g., 0.70, not 70).\n"
+                                            report += "=============================================\n"
+                    else:
+                                        # buradaki her şey (Drag hesabı, rapor satırları...) bir tab içeri girecek
+                        report += "-> Advanced inputs loaded successfully! Generating full report...\n"
+                        report += "---------------------------------------------\n"
+                        
+                        Drag = 0.5 * r * (velocity ** 2) * wing_area * cd
+                        required_power = Drag * velocity
+                        power_electrical = required_power / propulsion_efficiency
+                        propulsion_efficiency = float(self.entries["Propulsion Efficiency (0-1)"].get())
 
-                    report += f"-> Generated Lift Force (L)  : {Lift:.2f} N\n"
-                    report += f"-> Generated Drag Force (D)  : {Drag:.2f} N\n"
-                    report += f"-> Total Electrical Power Draw: {power_electrical:.2f} W\n"
-                    report += "---------------------------------------------\n"
-                    report += "          TIME & RANGE CALCULATIONS          \n"
-                    report += "---------------------------------------------\n"
-                    report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
-                    report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
-                    report += f"Estimated Max Range   : {range_km:.2f} km\n"
                     
-                    # ADVANCED FLUID MECHANICS REPORT
-                    report += "\n=============================================\n"
-                    report += "   ADVANCED AERODYNAMICS & FLUID MECHANICS   \n"
-                    report += "=============================================\n"
-                    p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
-                    p_total = p_static + (0.5 * r * velocity ** 2)
-                    wing_loading = w / wing_area# Kanadın 1 m²'sine düşen ağırlık miktarı Değer küçükse uçak daha yavaş uçabilir ve daha iyi manevra kabiliyetine sahip olur. Değer büyükse uçak daha hızlı uçabilir ama manevra kabiliyeti düşer.
-                    aspect_ratio = wing_span / chord
-                    oswald_efficiency = 0.85
-                    cd_induced = (cl ** 2) / (math.pi * aspect_ratio * oswald_efficiency)
-                    cd_parasite = cd - cd_induced
-                    mu = 1.789e-5
-                    reynolds = (r * velocity * chord) / mu
-                    speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
-                    mach_number = velocity / speed_of_sound
+                        
+                        flight_time_hours = battery_capacity_wh / power_electrical
+                        flight_time_minutes = flight_time_hours * 60
+                        range_km = velocity * flight_time_hours * 3.6
 
-                    report += "\n=============================================\n"
-                    report += "              ASSUMPTIONS USED               \n"
-                    report += "=============================================\n"
-                    report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
-                    report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
-                    report += f"-> Propulsion Efficiency (eta)   : {efficiency:.2f}\n"
-                    report += "=============================================\n"
+                        report += f"-> Generated Lift Force (L)  : {Lift:.2f} N\n"
+                        report += f"-> Generated Drag Force (D)  : {Drag:.2f} N\n"
+                        report += f"-> Total Electrical Power Draw: {power_electrical:.2f} W\n"
+                        report += "---------------------------------------------\n"
+                        report += "          TIME & RANGE CALCULATIONS          \n"
+                        report += "---------------------------------------------\n"
+                        report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
+                        report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
+                        report += f"Estimated Max Range   : {range_km:.2f} km\n"
+                        
+                        # ADVANCED FLUID MECHANICS REPORT
+                        report += "\n=============================================\n"
+                        report += "   ADVANCED AERODYNAMICS & FLUID MECHANICS   \n"
+                        report += "=============================================\n"
+                        p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
+                        p_total = p_static + (0.5 * r * velocity ** 2)
+                        wing_loading = w / wing_area# Kanadın 1 m²'sine düşen ağırlık miktarı Değer küçükse uçak daha yavaş uçabilir ve daha iyi manevra kabiliyetine sahip olur. Değer büyükse uçak daha hızlı uçabilir ama manevra kabiliyeti düşer.
+                        aspect_ratio = wing_span / chord
+                        oswald_efficiency = 0.85
+                        cd_induced = (cl ** 2) / (math.pi * aspect_ratio * oswald_efficiency)
+                        cd_parasite = cd - cd_induced
+                        mu = 1.789e-5
+                        reynolds = (r * velocity * chord) / mu
+                        speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
+                        mach_number = velocity / speed_of_sound
 
-                    report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
-                    report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
-                    report += f"-> Wing Loading (W/S)        : {wing_loading:.2f} N/m²\n"
-                    report += f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}\n"
-                    report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
-                    report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
-                    report += f"-> Reynolds Number (Re)      : {reynolds:.1f}\n"
-                    report += f"-> Mach Number (M)           : {mach_number:.4f}\n"
-                    report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
-                    report += "=============================================\n"
+                        report += "\n=============================================\n"
+                        report += "              ASSUMPTIONS USED               \n"
+                        report += "=============================================\n"
+                        report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
+                        report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
+                        report += f"-> Propulsion Efficiency (eta)   : {propulsion_efficiency:.2f}\n"
+                        report += "=============================================\n"
+
+                        report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
+                        report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
+                        report += f"-> Wing Loading (W/S)        : {wing_loading:.2f} N/m²\n"
+                        report += f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}\n"
+                        report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
+                        report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
+                        report += f"-> Reynolds Number (Re)      : {reynolds:.1f}\n"
+                        report += f"-> Mach Number (M)           : {mach_number:.4f}\n"
+                        report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
+                        report += "=============================================\n"
 
             # Ekrana Raporu Basma
             self.output_text.configure(state="normal")
