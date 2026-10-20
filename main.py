@@ -12,7 +12,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
         # Pencere Kimliği ve Genişletilmiş Boyutlar
         self.title("Aerospace Technology - Flight Dynamics Simulator v1.2")
-        self.geometry("1200x720")  
+        self.geometry("1200x800")  
         self.resizable(False, False) 
 
         # ==============================================================================
@@ -135,7 +135,17 @@ class FlightSimulatorGUI(ctk.CTk):
             hover_color="#1D4ED8", 
             command=self.calculate_flight_physics
         )
-        self.run_button.pack(fill="x", padx=25, pady=(10, 20))
+        self.run_button.pack(side="left", padx=20, pady=10)
+        self.save_button = ctk.CTkButton(
+            self,
+            text="SAVE REPORT 💾",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            height=45,
+            fg_color="#059669",
+            hover_color="#047857",
+            command=self.export_report_to_txt
+        )
+        self.save_button.pack(side="left", padx=20, pady=10)
 
     # ==============================================================================
     # ✈️ HAZIR UÇAK PROFİLLERİNİ YÜKLEME FONKSİYONU
@@ -193,17 +203,19 @@ class FlightSimulatorGUI(ctk.CTk):
     def export_report_to_txt(self):
         # Textbox içindeki yazıyı alıyoruz
         report_content = self.output_text.get("0.0", "end")
-        
-        # Kullanıcıya dosyayı nereye kaydetmek istediğini soran pencere açıyoruz
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
-            title="Save Flight Report"
-        )
-        
-        if file_path:
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(report_content)
+        if report_content.strip() == "":
+            return
+        else:
+            # Kullanıcıya dosyayı nereye kaydetmek istediğini soran pencere açıyoruz
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+                title="Save Flight Report"
+            )
+            
+            if file_path:
+                with open(file_path, "w", encoding="utf-8") as file:
+                    file.write(report_content)
 
     # ==============================================================================
     # 🧠 THE FLIGHT PHYSICS ENGINE (AKILLI DİNAMİK MOTOR)
