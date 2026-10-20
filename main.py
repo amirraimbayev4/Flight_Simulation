@@ -225,10 +225,11 @@ class FlightSimulatorGUI(ctk.CTk):
             wing_area = wing_span * chord
             Lift = 0.5 * r * (velocity ** 2) * wing_area * cl
             
-            cl_max = 1.5
+            cl_max = 1.5 #Bu değer aslında tamamen varsayım beeli bir aralık içinde değişebilir. İleride eğer kanat profilleri ekerlsem bu değerleri de değştiricem.
             v_stall = math.sqrt((2 * w) / (r * wing_area * cl_max))
 
             is_lift_enough = Lift >= w
+            is_cl_valid = cl <= cl_max#Bunu eklememizin sebebi , eğer Cl değeri Cl max değerinden fazlaysa uçak stall olur ve uçak uçamaz.(Yeni bir bilgi daha öğrendim ve bunu eklemenin mantıklı olduğunu düşündüm.)
             is_speed_safe = velocity >= v_stall
 
             report = ""
@@ -240,7 +241,7 @@ class FlightSimulatorGUI(ctk.CTk):
             report += "---------------------------------------------\n"
 
             # EĞER UÇAK UÇAMIYORSA (FAILED)
-            if not (is_lift_enough and is_speed_safe):
+            if not (is_lift_enough and is_speed_safe and is_cl_valid):
                 for field, _ in self.advanced_fields:
                     self.labels[field].grid_forget()
                     self.entries[field].grid_forget()
@@ -255,9 +256,13 @@ class FlightSimulatorGUI(ctk.CTk):
                 if not is_speed_safe:
                     report += f"  -> ISSUE: STALL RISK! Your speed ({velocity:.2f} m/s) is below safety limit.\n"
                     report += f"     REQUIRED: Fly at least {v_stall:.2f} m/s ({v_stall * 3.6:.1f} km/h).\n"
+                if not is_cl_valid:
+                    report += f"  -> ISSUE: Cl ({cl}) exceeds Cl_max ({cl_max}). Wing would stall.\n"
+                    report += "     FIX  : Lower Cl or use a higher-lift airfoil/flap.\n"
+
                 report += "\n-> Advanced parameters (Cd, Wh) locked due to flight failure.\n"
                 report += "=============================================\n"
-
+                
             # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)    
             else:
                 report += "=============================================\n"
