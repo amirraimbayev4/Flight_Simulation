@@ -315,14 +315,23 @@ class FlightSimulatorGUI(ctk.CTk):
                     report += "=============================================\n"
                     p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
                     p_total = p_static + (0.5 * r * velocity ** 2)
-                    wing_loading = w / wing_area# Kanadın 1 m²'sine düşen ağırlık miktarı
+                    wing_loading = w / wing_area# Kanadın 1 m²'sine düşen ağırlık miktarı Değer küçükse uçak daha yavaş uçabilir ve daha iyi manevra kabiliyetine sahip olur. Değer büyükse uçak daha hızlı uçabilir ama manevra kabiliyeti düşer.
                     aspect_ratio = wing_span / chord
-                    cd_induced = (cl ** 2) / (math.pi * aspect_ratio * 0.85)
+                    oswald_efficiency = 0.85
+                    cd_induced = (cl ** 2) / (math.pi * aspect_ratio * oswald_efficiency)
                     cd_parasite = cd - cd_induced
                     mu = 1.789e-5
                     reynolds = (r * velocity * chord) / mu
                     speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
                     mach_number = velocity / speed_of_sound
+
+                    report += "\n=============================================\n"
+                    report += "              ASSUMPTIONS USED               \n"
+                    report += "=============================================\n"
+                    report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
+                    report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
+                    report += f"-> Propulsion Efficiency (eta)   : {efficiency:.2f}\n"
+                    report += "=============================================\n"
 
                     report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
                     report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
