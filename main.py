@@ -106,7 +106,7 @@ class FlightSimulatorGUI(ctk.CTk):
         # ------------------------------------------------------------------------------
         # SAĞ PANEL: DIJITAL EKRAN (OUTPUT PANEL)
         # ------------------------------------------------------------------------------
-        self.output_frame = ctk.CTkFrame(self.main_container, width=600)
+        self.output_frame = ctk.CTkFrame(self.main_container, width=720)
         self.output_frame.pack(side="right", fill="both", expand=True, padx=(15, 0), pady=10)
 
         self.output_title = ctk.CTkLabel(self.output_frame, text="FLIGHT REPORT", font=ctk.CTkFont(size=16, weight="bold"), text_color="#FBBF24")
@@ -315,7 +315,7 @@ class FlightSimulatorGUI(ctk.CTk):
                     report += "=============================================\n"
                     p_static = 101325 * (1 - 0.00002256 * altitude) ** 5.256
                     p_total = p_static + (0.5 * r * velocity ** 2)
-                    cp_difference = cl / 2
+                    wing_loading = w / wing_area# Kanadın 1 m²'sine düşen ağırlık miktarı
                     aspect_ratio = wing_span / chord
                     cd_induced = (cl ** 2) / (math.pi * aspect_ratio * 0.85)
                     cd_parasite = cd - cd_induced
@@ -326,7 +326,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
                     report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
                     report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
-                    report += f"-> Mean Pressure Coeff (Cp)  : {cp_difference:.4f}\n"
+                    report += f"-> Wing Loading (W/S)        : {wing_loading:.2f} N/m²\n"
                     report += f"-> Wing Aspect Ratio (AR)    : {aspect_ratio:.2f}\n"
                     report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
                     report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
