@@ -10,8 +10,8 @@ class FlightSimulatorGUI(ctk.CTk):
         super().__init__()
 
         # Pencere Kimliği ve Genişletilmiş Boyutlar
-        self.title("Aerospace Technology - Flight Dynamics Simulator v1.1")
-        self.geometry("1150x820")  
+        self.title("Aerospace Technology - Flight Dynamics Simulator v1.2")
+        self.geometry("1150x850")  
         self.resizable(False, False) 
 
         # ==============================================================================
@@ -23,13 +23,37 @@ class FlightSimulatorGUI(ctk.CTk):
             font=ctk.CTkFont(family="Helvetica", size=24, weight="normal"),
             text_color="#3B82F6" 
         )
-        self.title_label.pack(padx=20, pady=25)
+        self.title_label.pack(padx=20, pady=15)
+
+        # ==============================================================================
+        # HAZIR UÇAK PROFİLLERİ (PRESETS) SEÇİM ALANI
+        # ==============================================================================
+        self.preset_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=8)
+        self.preset_frame.pack(fill="x", padx=25, pady=(0, 10))
+
+        self.preset_label = ctk.CTkLabel(
+            self.preset_frame, 
+            text="⚡ Quick Aircraft Presets:", 
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#FBBF24"
+        )
+        self.preset_label.pack(side="left", padx=15, pady=10)
+
+        # Hazır uçak seçenekleri
+        self.preset_dropdown = ctk.CTkComboBox(
+            self.preset_frame, 
+            values=["Custom (Manuel Giriş)", "Delivery Drone (İHA)", "Electric Glider (Planör)"],
+            command=self.load_preset,
+            width=220
+        )
+        self.preset_dropdown.pack(side="left", padx=10, pady=10)
+        self.preset_dropdown.set("Custom (Manuel Giriş)")
 
         # ==============================================================================
         # ANA PANEL (SOL GİRDİLER VE SAĞ SONUÇLAR)
         # ==============================================================================
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=25, pady=10)
+        self.main_container.pack(fill="both", expand=True, padx=25, pady=5)
 
         # ------------------------------------------------------------------------------
         # SOL PANEL: GİRDİLER (INPUT PANEL)
@@ -40,7 +64,7 @@ class FlightSimulatorGUI(ctk.CTk):
         self.entries = {}
         self.labels = {}
         
-        # 1. Aşama Girdileri: Hazır sayıları sildik, sadece rehber yazılar (Placeholder) bıraktık
+        # Temel Girdiler
         self.basic_fields = [
             ("Altitude (m)", "e.g., 1500"),
             ("Empty Weight (kg)", "e.g., 5.0"),
@@ -52,7 +76,7 @@ class FlightSimulatorGUI(ctk.CTk):
             ("Lift Coefficient (Cl)", "e.g., 0.6")
         ]
 
-        # 2. Aşama Girdileri: Gizli olan gelişmiş girdiler
+        # Gelişmiş Girdiler (Başlangıçta gizli)
         self.advanced_fields = [
             ("Drag Coefficient (Cd)", "e.g., 0.042"),
             ("Battery Capacity (Wh)", "e.g., 450")
@@ -62,16 +86,15 @@ class FlightSimulatorGUI(ctk.CTk):
         current_row = 0
         for label_text, placeholder_val in self.basic_fields:
             lbl = ctk.CTkLabel(self.input_frame, text=label_text, font=ctk.CTkFont(size=13, weight="normal"))
-            lbl.grid(row=current_row, column=0, padx=20, pady=10, sticky="w")
+            lbl.grid(row=current_row, column=0, padx=20, pady=8, sticky="w")
             
-            # .insert() komutunu kaldırıp placeholder_text ekledik, böylece içi boş başlayacak
             entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text=placeholder_val)
-            entry.grid(row=current_row, column=1, padx=20, pady=10, sticky="e")
+            entry.grid(row=current_row, column=1, padx=20, pady=8, sticky="e")
             
             self.entries[label_text] = entry
             current_row += 1
 
-        # Gelişmiş girdileri oluşturuyoruz (İlk başta gizli)
+        # Gelişmiş girdileri oluşturuyoruz
         for label_text, placeholder_val in self.advanced_fields:
             lbl = ctk.CTkLabel(self.input_frame, text=label_text, text_color="#FBBF24", font=ctk.CTkFont(size=13, weight="bold"))
             entry = ctk.CTkEntry(self.input_frame, width=160, border_color="#FBBF24", placeholder_text=placeholder_val)
@@ -95,7 +118,7 @@ class FlightSimulatorGUI(ctk.CTk):
             text_color="#10B981" 
         )
         self.output_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        self.output_text.insert("0.0", "Enter core inputs and press 'RUN SIMULATION'.\nIf takeoff conditions are met, advanced parameters (Cd, Wh) will unlock dynamically!")
+        self.output_text.insert("0.0", "Select a preset or enter core inputs manually, then press 'RUN SIMULATION'.\nIf takeoff conditions are met, advanced parameters will unlock dynamically!")
         self.output_text.configure(state="disabled") 
 
         # ==============================================================================
@@ -105,12 +128,58 @@ class FlightSimulatorGUI(ctk.CTk):
             self, 
             text="RUN FLIGHT SIMULATION", 
             font=ctk.CTkFont(size=16, weight="bold"),
-            height=50,
+            height=45,
             fg_color="#2563EB", 
             hover_color="#1D4ED8", 
             command=self.calculate_flight_physics
         )
-        self.run_button.pack(fill="x", padx=25, pady=(15, 25))
+        self.run_button.pack(fill="x", padx=25, pady=(10, 20))
+
+    # ==============================================================================
+    # ✈️ HAZIR UÇAK PROFİLLERİNİ YÜKLEME FONKSİYONU
+    # ==============================================================================
+    def load_preset(self, choice):
+        presets_data = {
+            "Delivery Drone (İHA)": {
+                "Altitude (m)": "100",
+                "Empty Weight (kg)": "3.5",
+                "Battery Weight (kg)": "2.0",
+                "Payload Weight (kg)": "1.5",
+                "Wing Span (m)": "2.0",
+                "Chord Length (m)": "0.25",
+                "Velocity (m/s)": "18",
+                "Lift Coefficient (Cl)": "0.55",
+                "Drag Coefficient (Cd)": "0.035",
+                "Battery Capacity (Wh)": "300"
+            },
+            "Electric Glider (Planör)": {
+                "Altitude (m)": "500",
+                "Empty Weight (kg)": "2.0",
+                "Battery Weight (kg)": "1.0",
+                "Payload Weight (kg)": "0.2",
+                "Wing Span (m)": "3.2",
+                "Chord Length (m)": "0.20",
+                "Velocity (m/s)": "15",
+                "Lift Coefficient (Cl)": "0.80",
+                "Drag Coefficient (Cd)": "0.020",
+                "Battery Capacity (Wh)": "150"
+            }
+        }
+
+        if choice in presets_data:
+            data = presets_data[choice]
+            for key, val in data.items():
+                if key in self.entries:
+                    self.entries[key].delete(0, "end")
+                    self.entries[key].insert(0, val)
+            
+            # Gelişmiş kutuların gizliliğini açıp değerleri dolduralım
+            start_row = len(self.basic_fields)
+            for field, _ in self.advanced_fields:
+                self.labels[field].grid(row=start_row, column=0, padx=20, pady=8, sticky="w")
+                self.entries[field].grid(row=start_row, column=1, padx=20, pady=8, sticky="e")
+                start_row += 1
+            self.update_idletasks()
 
     # ==============================================================================
     # 🧠 THE FLIGHT PHYSICS ENGINE (AKILLI DİNAMİK MOTOR)
@@ -143,9 +212,9 @@ class FlightSimulatorGUI(ctk.CTk):
 
             report = ""
             report += "=============================================\n"
-            report += "       ENVIRONMENT & ATMOSPHERE LAYER       \n"
+            report += "       ENVIRONMENT & ATMOSPHERE LAYER      \n"
             report += "=============================================\n"
-            report += f"-> Air Density (\u03c1) : {r:.4f} kg/m^3\n"
+            report += f"-> Air Density (ρ) : {r:.4f} kg/m^3\n"
             report += f"-> Total Aircraft Weight (W) : {w:.2f} N\n"
             report += "---------------------------------------------\n"
 
@@ -156,7 +225,7 @@ class FlightSimulatorGUI(ctk.CTk):
                     self.entries[field].grid_forget()
 
                 report += "\n=============================================\n"
-                report += "FLIGHT STATUS: FAILED! \u274c The aircraft CANNOT fly.\n"
+                report += "FLIGHT STATUS: FAILED! ❌ The aircraft CANNOT fly.\n"
                 report += "=============================================\n"
                 report += "[DIAGNOSTIC REPORT & FIXES]:\n"
                 if not is_lift_enough:
@@ -168,32 +237,27 @@ class FlightSimulatorGUI(ctk.CTk):
                 report += "\n-> Advanced parameters (Cd, Wh) locked due to flight failure.\n"
                 report += "=============================================\n"
 
-                        # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)    
+            # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)    
             else:
-                # 1. Başarı mesajını rapora ekle
                 report += "=============================================\n"
                 report += "FLIGHT STATUS: SUCCESS! 🛫 Modelled steady-flight checks passed.\n"
                 report += "=============================================\n"
                 
-                # 2. Gizli kutuları ekrana çiz (grid et)
+                # Gizli kutuları ekrana çiz (grid et)
                 start_row = len(self.basic_fields)
                 for field, _ in self.advanced_fields:
-                    self.labels[field].grid(row=start_row, column=0, padx=20, pady=10, sticky="w")
-                    self.entries[field].grid(row=start_row, column=1, padx=20, pady=10, sticky="e")
+                    self.labels[field].grid(row=start_row, column=0, padx=20, pady=8, sticky="w")
+                    self.entries[field].grid(row=start_row, column=1, padx=20, pady=8, sticky="e")
                     start_row += 1
 
-                # 3. Grafik motorunu anlık tazele ki kutular ekranda hemen görünsün
                 self.update_idletasks()
 
-                # 🚨 AKILLI KONTROL: Eğer yeni açılan kutular henüz boşsa, programın hata verip 
-                # çökmesini engellemek için kullanıcıya rehber bir mesaj basıp burada duruyoruz (Erken Çıkış).
                 if self.entries["Drag Coefficient (Cd)"].get() == "" or self.entries["Battery Capacity (Wh)"].get() == "":
                     report += "-> Advanced parameters (Cd, Wh) have been unlocked below!\n"
                     report += "-> ACTION REQUIRED: Please enter values for Cd and Wh in the left panel,\n"
                     report += "   then press 'RUN FLIGHT SIMULATION' again for full analytics.\n"
                     report += "=============================================\n"
-                else:#Bu kısımda yapay zeka ve internetten yardım aldım. Tasarım konusunda çok fazla zaman kaybı yaşamak istemedim.
-                    # Eğer kutular doluysa (yani butona ikinci kez basılıyorsa) tüm formülleri güvenle hesapla:
+                else:
                     cd = float(self.entries["Drag Coefficient (Cd)"].get())
                     battery_capacity_wh = float(self.entries["Battery Capacity (Wh)"].get())
                     
@@ -241,10 +305,9 @@ class FlightSimulatorGUI(ctk.CTk):
                     report += f"-> Parasite Drag Coeff (Cd0) : {max(0.0, cd_parasite):.4f}\n"
                     report += f"-> Induced Drag Coeff (Cdi)  : {cd_induced:.4f}\n"
                     report += f"-> Reynolds Number (Re)      : {reynolds:.1f}\n"
-                    report += f"-> Mach Number (M)            : {mach_number:.4f}\n"
+                    report += f"-> Mach Number (M)           : {mach_number:.4f}\n"
                     report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
                     report += "=============================================\n"
-
 
             # Ekrana Raporu Basma
             self.output_text.configure(state="normal")
