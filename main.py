@@ -145,10 +145,10 @@ class FlightSimulatorGUI(ctk.CTk):
                 "Empty Weight (kg)": "3.5",
                 "Battery Weight (kg)": "2.0",
                 "Payload Weight (kg)": "1.5",
-                "Wing Span (m)": "2.0",
-                "Chord Length (m)": "0.25",
-                "Velocity (m/s)": "18",
-                "Lift Coefficient (Cl)": "0.55",
+                "Wing Span (m)": "2.2",       # 2.0 -> 2.2 m yapıldı
+                "Chord Length (m)": "0.28",     # 0.25 -> 0.28 m yapıldı (Kanat alanı büyüdü) Çünkü kod çalıştığında uçağ ağır geliyordu ve lift yetersizdi. Bu yüzden kanat alanını büyüttük.
+                "Velocity (m/s)": "20",         # 18 -> 20 m/s yapıldı
+                "Lift Coefficient (Cl)": "0.65",# 0.55 -> 0.65 yapıldı
                 "Drag Coefficient (Cd)": "0.035",
                 "Battery Capacity (Wh)": "300"
             },
