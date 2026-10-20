@@ -314,7 +314,7 @@ class FlightSimulatorGUI(ctk.CTk):
                         Drag = 0.5 * r * (velocity ** 2) * wing_area * cd
                         required_power = Drag * velocity
                         power_electrical = required_power / propulsion_efficiency
-                        propulsion_efficiency = float(self.entries["Propulsion Efficiency (0-1)"].get())
+                        
 
                     
                         
@@ -331,6 +331,9 @@ class FlightSimulatorGUI(ctk.CTk):
                         report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
                         report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
                         report += f"Estimated Max Range   : {range_km:.2f} km\n"
+
+
+                        
                         
                         # ADVANCED FLUID MECHANICS REPORT
                         report += "\n=============================================\n"
@@ -347,7 +350,6 @@ class FlightSimulatorGUI(ctk.CTk):
                         reynolds = (r * velocity * chord) / mu
                         speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
                         mach_number = velocity / speed_of_sound
-
                         report += "\n=============================================\n"
                         report += "              ASSUMPTIONS USED               \n"
                         report += "=============================================\n"
