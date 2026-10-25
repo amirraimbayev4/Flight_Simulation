@@ -49,6 +49,13 @@ class FlightSimulatorGUI(ctk.CTk):
         )
         self.preset_dropdown.pack(side="left", padx=10, pady=10)
         self.preset_dropdown.set("Custom (Manuel Giriş)")
+        # Güç kaynağı seçimi: Electric veya Fuel
+        self.power_label = ctk.CTkLabel(self.preset_frame, text="Power Source:", font=ctk.CTkFont(size=13, weight="bold"), text_color="#FBBF24")
+        self.power_label.pack(side="left", padx=(25, 5), pady=10)
+
+        self.power_dropdown = ctk.CTkComboBox(self.preset_frame, values=["Electric", "Fuel"], command=self.change_power_source, width=120)
+        self.power_dropdown.pack(side="left", padx=5, pady=10)
+        self.power_dropdown.set("Electric")
 
         # ==============================================================================
         # ANA PANEL (SOL GİRDİLER VE SAĞ SONUÇLAR)
@@ -63,6 +70,7 @@ class FlightSimulatorGUI(ctk.CTk):
         self.input_frame.pack(side="left", fill="y", expand=False, padx=(0, 15), pady=10)
 
         self.entries = {}
+        self.report_ready = False
         self.labels = {}
         
         # Temel Girdiler
@@ -89,6 +97,7 @@ class FlightSimulatorGUI(ctk.CTk):
         for label_text, placeholder_val in self.basic_fields:
             lbl = ctk.CTkLabel(self.input_frame, text=label_text, font=ctk.CTkFont(size=13, weight="normal"))
             lbl.grid(row=current_row, column=0, padx=20, pady=8, sticky="w")
+            self.labels[label_text] = lbl
             
             entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text=placeholder_val)
             entry.grid(row=current_row, column=1, padx=20, pady=8, sticky="e")
@@ -103,6 +112,16 @@ class FlightSimulatorGUI(ctk.CTk):
             
             self.labels[label_text] = lbl
             self.entries[label_text] = entry
+         # Yakıtlı mod için kutu (başta gizli, grid yok)
+        fuel_lbl = ctk.CTkLabel(self.input_frame, text="Fuel Weight (kg)", font=ctk.CTkFont(size=13, weight="normal"))
+        fuel_entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text="e.g., 1.0")
+        self.labels["Fuel Weight (kg)"] = fuel_lbl
+        self.entries["Fuel Weight (kg)"] = fuel_entry
+
+        bsfc_lbl = ctk.CTkLabel(self.input_frame, text="BSFC (kg/kWh)", font=ctk.CTkFont(size=13, weight="normal"))
+        bsfc_entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text="e.g., 0.45")
+        self.labels["BSFC (kg/kWh)"] = bsfc_lbl
+        self.entries["BSFC (kg/kWh)"] = bsfc_entry
 
         # ------------------------------------------------------------------------------
         # SAĞ PANEL: DIJITAL EKRAN (OUTPUT PANEL)
@@ -203,7 +222,7 @@ class FlightSimulatorGUI(ctk.CTk):
     def export_report_to_txt(self):
         # Textbox içindeki yazıyı alıyoruz
         report_content = self.output_text.get("0.0", "end")
-        if report_content.strip() == "":
+        if not self.report_ready:
             return
         else:
             # Kullanıcıya dosyayı nereye kaydetmek istediğini soran pencere açıyoruz
@@ -216,6 +235,32 @@ class FlightSimulatorGUI(ctk.CTk):
             if file_path:
                 with open(file_path, "w", encoding="utf-8") as file:
                     file.write(report_content)
+
+    def change_power_source(self, choice):
+                # Seçime göre tema rengini belirle
+        if choice == "Fuel":
+            accent = "#F97316"
+            run_color = "#EA580C"
+            run_hover = "#C2410C"
+        else:
+            accent = "#3B82F6"
+            run_color = "#2563EB"
+            run_hover = "#1D4ED8"
+
+        # Başlığın ve RUN butonunun rengini değiştir
+        self.title_label.configure(text_color=accent)
+        self.run_button.configure(fg_color=run_color, hover_color=run_hover)
+                # Battery Weight yerine Fuel Weight göster (ikisi de row=2'de)
+        if choice == "Fuel":
+            self.labels["Battery Weight (kg)"].grid_forget()
+            self.entries["Battery Weight (kg)"].grid_forget()
+            self.labels["Fuel Weight (kg)"].grid(row=2, column=0, padx=20, pady=8, sticky="w")
+            self.entries["Fuel Weight (kg)"].grid(row=2, column=1, padx=20, pady=8, sticky="e")
+        else:
+            self.labels["Fuel Weight (kg)"].grid_forget()
+            self.entries["Fuel Weight (kg)"].grid_forget()
+            self.labels["Battery Weight (kg)"].grid(row=2, column=0, padx=20, pady=8, sticky="w")
+            self.entries["Battery Weight (kg)"].grid(row=2, column=1, padx=20, pady=8, sticky="e")
 
     # ==============================================================================
     # 🧠 THE FLIGHT PHYSICS ENGINE (AKILLI DİNAMİK MOTOR)
@@ -350,14 +395,7 @@ class FlightSimulatorGUI(ctk.CTk):
                         reynolds = (r * velocity * chord) / mu
                         speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
                         mach_number = velocity / speed_of_sound
-                        report += "\n=============================================\n"
-                        report += "              ASSUMPTIONS USED               \n"
-                        report += "=============================================\n"
-                        report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
-                        report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
-                        report += f"-> Propulsion Efficiency (eta)   : {propulsion_efficiency:.2f}\n"
-                        report += "=============================================\n"
-
+        
                         report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
                         report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
                         report += f"-> Wing Loading (W/S)        : {wing_loading:.2f} N/m²\n"
@@ -368,13 +406,22 @@ class FlightSimulatorGUI(ctk.CTk):
                         report += f"-> Mach Number (M)           : {mach_number:.4f}\n"
                         report += f"-> Cruise Thrust Required (T): {Drag:.2f} N\n"
                         report += "=============================================\n"
+                        report += "\n=============================================\n"
+                        report += "              ASSUMPTIONS USED               \n"
+                        report += "=============================================\n"
+                        report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
+                        report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
+                        report += f"-> Propulsion Efficiency (eta)   : {propulsion_efficiency:.2f}\n"
+                        report += "=============================================\n                       "                       
 
             # Ekrana Raporu Basma
             self.output_text.configure(state="normal")
             self.output_text.delete("0.0", "end")
             self.output_text.insert("0.0", report)
+            self.report_ready = True
             self.output_text.configure(state="disabled")
         except ValueError:
+            self.report_ready = False
             self.output_text.configure(state="normal")
             self.output_text.delete("0.0", "end")
             self.output_text.insert("0.0", "ERROR: Please make sure all input fields contain valid numerical values!")
