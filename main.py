@@ -49,13 +49,6 @@ class FlightSimulatorGUI(ctk.CTk):
         )
         self.preset_dropdown.pack(side="left", padx=10, pady=10)
         self.preset_dropdown.set("Custom (Manuel Giriş)")
-        # Güç kaynağı seçimi: Electric veya Fuel
-        self.power_label = ctk.CTkLabel(self.preset_frame, text="Power Source:", font=ctk.CTkFont(size=13, weight="bold"), text_color="#FBBF24")
-        self.power_label.pack(side="left", padx=(25, 5), pady=10)
-
-        self.power_dropdown = ctk.CTkComboBox(self.preset_frame, values=["Electric", "Fuel"], command=self.change_power_source, width=120)
-        self.power_dropdown.pack(side="left", padx=5, pady=10)
-        self.power_dropdown.set("Electric")
 
         # ==============================================================================
         # ANA PANEL (SOL GİRDİLER VE SAĞ SONUÇLAR)
@@ -112,16 +105,9 @@ class FlightSimulatorGUI(ctk.CTk):
             
             self.labels[label_text] = lbl
             self.entries[label_text] = entry
-         # Yakıtlı mod için kutu (başta gizli, grid yok)
-        fuel_lbl = ctk.CTkLabel(self.input_frame, text="Fuel Weight (kg)", font=ctk.CTkFont(size=13, weight="normal"))
-        fuel_entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text="e.g., 1.0")
-        self.labels["Fuel Weight (kg)"] = fuel_lbl
-        self.entries["Fuel Weight (kg)"] = fuel_entry
+        
 
-        bsfc_lbl = ctk.CTkLabel(self.input_frame, text="BSFC (kg/kWh)", font=ctk.CTkFont(size=13, weight="normal"))
-        bsfc_entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text="e.g., 0.45")
-        self.labels["BSFC (kg/kWh)"] = bsfc_lbl
-        self.entries["BSFC (kg/kWh)"] = bsfc_entry
+    
 
         # ------------------------------------------------------------------------------
         # SAĞ PANEL: DIJITAL EKRAN (OUTPUT PANEL)
@@ -236,31 +222,11 @@ class FlightSimulatorGUI(ctk.CTk):
                 with open(file_path, "w", encoding="utf-8") as file:
                     file.write(report_content)
 
-    def change_power_source(self, choice):
-                # Seçime göre tema rengini belirle
-        if choice == "Fuel":
-            accent = "#F97316"
-            run_color = "#EA580C"
-            run_hover = "#C2410C"
-        else:
-            accent = "#3B82F6"
-            run_color = "#2563EB"
-            run_hover = "#1D4ED8"
+   
 
-        # Başlığın ve RUN butonunun rengini değiştir
-        self.title_label.configure(text_color=accent)
-        self.run_button.configure(fg_color=run_color, hover_color=run_hover)
-                # Battery Weight yerine Fuel Weight göster (ikisi de row=2'de)
-        if choice == "Fuel":
-            self.labels["Battery Weight (kg)"].grid_forget()
-            self.entries["Battery Weight (kg)"].grid_forget()
-            self.labels["Fuel Weight (kg)"].grid(row=2, column=0, padx=20, pady=8, sticky="w")
-            self.entries["Fuel Weight (kg)"].grid(row=2, column=1, padx=20, pady=8, sticky="e")
-        else:
-            self.labels["Fuel Weight (kg)"].grid_forget()
-            self.entries["Fuel Weight (kg)"].grid_forget()
-            self.labels["Battery Weight (kg)"].grid(row=2, column=0, padx=20, pady=8, sticky="w")
-            self.entries["Battery Weight (kg)"].grid(row=2, column=1, padx=20, pady=8, sticky="e")
+        
+        
+
 
     # ==============================================================================
     # 🧠 THE FLIGHT PHYSICS ENGINE (AKILLI DİNAMİK MOTOR)
@@ -412,7 +378,7 @@ class FlightSimulatorGUI(ctk.CTk):
                         report += f"-> Max Lift Coefficient (Cl_max) : {cl_max:.2f}\n"
                         report += f"-> Oswald Efficiency (e)         : {oswald_efficiency:.2f}\n"
                         report += f"-> Propulsion Efficiency (eta)   : {propulsion_efficiency:.2f}\n"
-                        report += "=============================================\n                       "                       
+                        report += "=============================================\n"                       
 
             # Ekrana Raporu Basma
             self.output_text.configure(state="normal")
