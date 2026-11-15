@@ -6,6 +6,200 @@ from tkinter import filedialog
 ctk.set_appearance_mode("Dark")  
 ctk.set_default_color_theme("blue")  
 
+# ==============================================================================
+# 📈 SPEED SWEEP + GRAPH (Range & Endurance vs Airspeed)
+# ------------------------------------------------------------------------------
+# Fikir: Sabit irtifada düz uçuşta kaldırma = ağırlık olmak zorunda. Hız değişince
+#        gereken Cl değişir:  Cl = 2W / (rho * V^2 * S)
+#        Sürükleme:           Cd = Cd0 + k * Cl^2   (k = 1 / (pi * AR * e))
+#        Düşük hızda indüklenmiş sürükleme, yüksek hızda parazit sürükleme baskın
+#        olur -> toplam sürükleme U şeklinde çıkar -> en verimli hız bir tepe noktası.
+# ==============================================================================
+def build_speed_sweep(sim, points=500):
+    import numpy as np
+
+    rho, W, S = sim["rho"], sim["W"], sim["S"]
+    k, cd0 = sim["k"], sim["cd0"]
+    eta, wh = sim["eta"], sim["wh"]
+    v_stall = sim["v_stall"]
+
+    # Stall hızından başlayıp kullanıcının hızının ~1.6 katına kadar tara
+    v_max = max(sim["velocity"] * 1.6, v_stall * 2.6)
+    v = np.linspace(v_stall, v_max, points)
+
+    cl_req = 2 * W / (rho * v ** 2 * S)          # her hızda gereken Cl
+    q_s = 0.5 * rho * v ** 2 * S                 # dinamik basınç * kanat alanı
+    d_parasite = q_s * cd0
+    d_induced = q_s * k * cl_req ** 2
+    drag = d_parasite + d_induced
+
+    power_elec = drag * v / eta                  # W
+    hours = wh / power_elec
+    return {
+        "v": v,
+        "cl": cl_req,
+        "d_par": d_parasite,
+        "d_ind": d_induced,
+        "drag": drag,
+        "power": power_elec,
+        "minutes": hours * 60,
+        "range_km": v * hours * 3.6,
+    }
+
+
+def draw_range_figure(sim):
+    from matplotlib.figure import Figure
+    import numpy as np
+
+    BG, PANEL, GRID = "#242424", "#1E1E1E", "#34373E"
+    TEXT, MUTED = "#E5E7EB", "#9CA3AF"
+    BLUE, GREEN, AMBER, RED = "#3B82F6", "#10B981", "#FBBF24", "#EF4444"
+
+    s = build_speed_sweep(sim)
+    v, rng, mins, drag = s["v"], s["range_km"], s["minutes"], s["drag"]
+    i_r = int(np.argmax(rng))       # en uzun menzil
+    i_e = int(np.argmax(mins))      # en uzun uçuş süresi
+    i_d = int(np.argmin(drag))      # en düşük sürükleme (teoride i_r ile aynı)
+
+    v_stall, v_user = sim["v_stall"], sim["velocity"]
+    x_min, x_max = v_stall * 0.82, v[-1]
+
+    fig = Figure(figsize=(10, 7.6), dpi=100, facecolor=BG)
+    gs = fig.add_gridspec(2, 1, height_ratios=[1.3, 1], hspace=0.30,
+                          left=0.085, right=0.915, top=0.80, bottom=0.12)
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1], sharex=ax1)
+
+    def style(ax, grid=True):
+        ax.set_facecolor(PANEL)
+        for sp in ax.spines.values():
+            sp.set_color(GRID)
+        ax.tick_params(colors=MUTED, labelsize=9)
+        if grid:
+            ax.grid(True, color=GRID, alpha=0.7, linewidth=0.7)
+            ax.set_axisbelow(True)
+
+    # ------------------------------------------------------------------
+    # ÜST GRAFİK: Menzil (mavi) ve Uçuş Süresi (yeşil) - hıza karşı
+    # ------------------------------------------------------------------
+    style(ax1)
+    ax1b = ax1.twinx()
+    style(ax1b, grid=False)
+
+    ax1.plot(v, rng, color=BLUE, lw=2.8, label="Range (km)", zorder=3)
+    ax1.fill_between(v, rng, color=BLUE, alpha=0.12, zorder=2)
+    ax1b.plot(v, mins, color=GREEN, lw=2.4, label="Endurance (min)", zorder=3)
+
+    r_top, e_top = rng.max() * 1.50, mins.max() * 1.50
+    ax1.set_ylim(0, r_top)
+    ax1b.set_ylim(0, e_top)
+    ax1.set_xlim(x_min, x_max)
+    ax1.set_ylabel("Range (km)", color=BLUE, fontsize=10.5, weight="bold")
+    ax1b.set_ylabel("Endurance (min)", color=GREEN, fontsize=10.5, weight="bold")
+    ax1.tick_params(axis="y", colors=BLUE)
+    ax1b.tick_params(axis="y", colors=GREEN)
+
+    # Stall bölgesi (uçulamaz)
+    ax1.axvspan(x_min, v_stall, color=RED, alpha=0.18, lw=0, zorder=1)
+    ax1.text((x_min + v_stall) / 2, r_top * 0.5, "STALL ZONE", rotation=90,
+             ha="center", va="center", color=RED, fontsize=9, weight="bold")
+
+    # Kullanıcının girdiği hız
+    ax1.axvline(v_user, color=AMBER, ls="--", lw=1.5, zorder=2)
+    r_user = float(np.interp(v_user, v, rng))
+    ax1.scatter([v_user], [r_user], s=60, color=AMBER, edgecolor=BG, zorder=6)
+    ax1.text(v_user, r_top * 0.97, f" Your speed\n {v_user:.1f} m/s", color=AMBER,
+             fontsize=9, va="top", ha="left")
+
+    # En uzun menzil noktası
+    ax1.scatter([v[i_r]], [rng[i_r]], s=260, marker="*", color=AMBER,
+                edgecolor=BG, linewidth=1.2, zorder=7)
+    ax1.annotate(
+        f"MAX RANGE\n{rng[i_r]:.0f} km @ {v[i_r]:.1f} m/s ({v[i_r] * 3.6:.0f} km/h)",
+        xy=(v[i_r], rng[i_r]), xytext=(55, -75), textcoords="offset points",
+        color=TEXT, fontsize=9.5, weight="bold",
+        bbox=dict(boxstyle="round,pad=0.45", fc=BG, ec=BLUE, lw=1.4),
+        arrowprops=dict(arrowstyle="->", color=BLUE, lw=1.4), zorder=8)
+
+    # En uzun uçuş süresi noktası
+    ax1b.scatter([v[i_e]], [mins[i_e]], s=260, marker="*", color=GREEN,
+                 edgecolor=BG, linewidth=1.2, zorder=7)
+    ax1b.annotate(
+        f"MAX ENDURANCE\n{mins[i_e]:.0f} min @ {v[i_e]:.1f} m/s",
+        xy=(v[i_e], mins[i_e]), xytext=(-20, 30), textcoords="offset points",
+        ha="right", color=TEXT, fontsize=9.5, weight="bold",
+        bbox=dict(boxstyle="round,pad=0.45", fc=BG, ec=GREEN, lw=1.4),
+        arrowprops=dict(arrowstyle="->", color=GREEN, lw=1.4), zorder=8)
+
+    h1, l1 = ax1.get_legend_handles_labels()
+    h2, l2 = ax1b.get_legend_handles_labels()
+    leg = ax1.legend(h1 + h2, l1 + l2, loc="lower right", facecolor=BG,
+                     edgecolor=GRID, fontsize=9, labelcolor=TEXT)
+    leg.set_zorder(10)
+
+    # Üstte ikinci eksen: km/h
+    top = ax1.secondary_xaxis("top", functions=(lambda x: x * 3.6, lambda x: x / 3.6))
+    top.set_xlabel("Airspeed (km/h)", color=MUTED, fontsize=9.5)
+    top.tick_params(colors=MUTED, labelsize=9)
+    for sp in top.spines.values():
+        sp.set_color(GRID)
+    ax1.tick_params(labelbottom=False)
+
+    # ------------------------------------------------------------------
+    # ALT GRAFİK: Sürükleme bileşenleri (U şekli) - hıza karşı
+    # ------------------------------------------------------------------
+    style(ax2)
+    ax2.plot(v, s["d_par"], color=BLUE, ls="--", lw=1.9, label="Parasite drag (grows with V²)")
+    ax2.plot(v, s["d_ind"], color=RED, ls="--", lw=1.9, label="Induced drag (falls with V²)")
+    ax2.plot(v, drag, color=AMBER, lw=2.9, label="Total drag", zorder=4)
+    ax2.fill_between(v, drag, color=AMBER, alpha=0.08)
+    ax2.axvspan(x_min, v_stall, color=RED, alpha=0.18, lw=0)
+
+    d_top = drag.max() * 1.70
+    ax2.set_ylim(0, d_top)
+    ax2.set_xlabel("Airspeed (m/s)", color=MUTED, fontsize=10.5)
+    ax2.set_ylabel("Drag (N)", color=AMBER, fontsize=10.5, weight="bold")
+    ax2.tick_params(axis="y", colors=AMBER)
+
+    ax2.scatter([v[i_d]], [drag[i_d]], s=240, marker="*", color=AMBER,
+                edgecolor=BG, linewidth=1.2, zorder=7)
+    ax2.annotate(
+        f"MIN DRAG {drag[i_d]:.2f} N @ {v[i_d]:.1f} m/s\n= best-range speed",
+        xy=(v[i_d], drag[i_d]), xytext=(-70, 70), textcoords="offset points",
+        color=TEXT, fontsize=9.5, weight="bold",
+        bbox=dict(boxstyle="round,pad=0.45", fc=BG, ec=AMBER, lw=1.4),
+        arrowprops=dict(arrowstyle="->", color=AMBER, lw=1.4), zorder=8)
+
+    # Aynı hızları üst grafikle bağlayan ince çizgiler
+    for ax in (ax1, ax2):
+        ax.axvline(v[i_r], color=BLUE, ls=":", lw=1.2, alpha=0.8, zorder=1)
+        ax.axvline(v[i_e], color=GREEN, ls=":", lw=1.2, alpha=0.8, zorder=1,
+                   label="Best-endurance speed (min power)" if ax is ax2 else None)
+
+    leg2 = ax2.legend(loc="upper right", facecolor=BG, edgecolor=GRID, fontsize=9, labelcolor=TEXT)
+    leg2.set_zorder(10)
+
+    # ------------------------------------------------------------------
+    # Başlık ve dipnotlar
+    # ------------------------------------------------------------------
+    fig.text(0.5, 0.955, "RANGE & ENDURANCE vs. AIRSPEED", ha="center",
+             color=BLUE, fontsize=17, weight="bold")
+    fig.text(0.5, 0.915,
+             f"Steady level flight  •  Mass {sim['mass']:.1f} kg  •  Wing area {sim['S']:.2f} m²  •  "
+             f"Aspect ratio {sim['AR']:.1f}  •  Battery {sim['wh']:.0f} Wh  •  η = {sim['eta']:.2f}",
+             ha="center", color=MUTED, fontsize=9.5)
+    fig.text(0.5, 0.038,
+             "Model: Cd = Cd0 + k·Cl²,  Cl = 2W/(ρV²S) at every speed.   "
+             f"Cd0 = {sim['cd0']:.4f} (from your Cd),  Oswald e = {sim['e']:.2f} (assumed).",
+             ha="center", color=MUTED, fontsize=8.5)
+    fig.text(0.5, 0.014,
+             "Battery treated as 100% usable and avionics power ignored, so absolute values are optimistic; "
+             "the SHAPE of the curves is the point.",
+             ha="center", color=MUTED, fontsize=8.5, style="italic")
+    return fig
+
+
+
 class FlightSimulatorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -64,6 +258,7 @@ class FlightSimulatorGUI(ctk.CTk):
 
         self.entries = {}
         self.report_ready = False
+        self.last_sim = None   # grafik için son başarılı simülasyonun verileri
         self.labels = {}
         
         # Temel Girdiler
@@ -151,6 +346,16 @@ class FlightSimulatorGUI(ctk.CTk):
             command=self.export_report_to_txt
         )
         self.save_button.pack(side="left", padx=20, pady=10)
+        self.graph_button = ctk.CTkButton(
+            self,
+            text="RANGE GRAPH 📈",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            height=45,
+            fg_color="#7C3AED",
+            hover_color="#6D28D9",
+            command=self.open_range_graph
+        )
+        self.graph_button.pack(side="left", padx=20, pady=10)
 
     # ==============================================================================
     # ✈️ HAZIR UÇAK PROFİLLERİNİ YÜKLEME FONKSİYONU
@@ -229,9 +434,78 @@ class FlightSimulatorGUI(ctk.CTk):
 
 
     # ==============================================================================
+    # 📈 GRAFİK PENCERESİ
+    # ==============================================================================
+    def show_message(self, text):
+        self.output_text.configure(state="normal")
+        self.output_text.delete("0.0", "end")
+        self.output_text.insert("0.0", text)
+        self.output_text.configure(state="disabled")
+
+    def open_range_graph(self):
+        # Grafik, tam raporun (Cd, Wh, verimlilik girilmiş) başarıyla çıkmış olmasını ister
+        if self.last_sim is None:
+            self.show_message(
+                "GRAPH NOT AVAILABLE YET.\n\n"
+                "1) Enter your inputs (or pick a preset) and press 'RUN FLIGHT SIMULATION'.\n"
+                "2) If the aircraft can fly, fill Cd, Battery Capacity and Propulsion Efficiency.\n"
+                "3) Run again to get the full report, then press 'RANGE GRAPH'."
+            )
+            return
+
+        if self.last_sim["cd0"] <= 0.001:
+            self.show_message(
+                "GRAPH NOT AVAILABLE: your Cd is too low.\n\n"
+                f"At Cl = {self.last_sim['cl_input']:.2f} the induced drag alone is "
+                f"{self.last_sim['k'] * self.last_sim['cl_input'] ** 2:.4f}, "
+                f"but you entered Cd = {self.last_sim['cd_input']:.4f}.\n"
+                "Total Cd must be larger than induced drag. Increase Cd and run again."
+            )
+            return
+
+        try:
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            fig = draw_range_figure(self.last_sim)
+        except ImportError:
+            self.show_message("matplotlib is missing. Install it with:\n\n    pip install matplotlib")
+            return
+
+        win = ctk.CTkToplevel(self)
+        win.title("Range & Endurance Analysis")
+        win.geometry("1050x840")
+
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(10, 5))
+
+        save_png = ctk.CTkButton(
+            win,
+            text="SAVE GRAPH AS PNG 🖼️",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            height=38,
+            fg_color="#059669",
+            hover_color="#047857",
+            command=lambda: self.save_graph_png(fig)
+        )
+        save_png.pack(pady=(0, 12))
+
+        win.after(200, win.lift)   # pencere ana pencerenin arkasında kalmasın
+        win.focus()
+
+    def save_graph_png(self, fig):
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG Image", "*.png"), ("All Files", "*.*")],
+            title="Save Graph"
+        )
+        if file_path:
+            fig.savefig(file_path, dpi=200, facecolor=fig.get_facecolor())
+
+    # ==============================================================================
     # 🧠 THE FLIGHT PHYSICS ENGINE (AKILLI DİNAMİK MOTOR)
     # ==============================================================================
     def calculate_flight_physics(self):
+        self.last_sim = None
         try:
             # Kutulardaki Değerleri Okuma ve Sayıya Çevirme
             altitude = float(self.entries["Altitude (m)"].get())
@@ -341,7 +615,8 @@ class FlightSimulatorGUI(ctk.CTk):
                         report += "---------------------------------------------\n"
                         report += f"Estimated Flight Time : {flight_time_hours:.2f} hours ({flight_time_minutes:.1f} minutes)\n"
                         report += f"Estimated Stall Speed : {v_stall:.2f} m/s\n"
-                        report += f"Estimated Max Range   : {range_km:.2f} km\n"
+                        report += f"Estimated Range (at your speed): {range_km:.2f} km\n"
+                        report += "-> Tip: press 'RANGE GRAPH' to find the speed with the longest range.\n"
 
 
                         
@@ -361,6 +636,17 @@ class FlightSimulatorGUI(ctk.CTk):
                         reynolds = (r * velocity * chord) / mu
                         speed_of_sound = math.sqrt(1.4 * 287.05 * (288.15 - 0.0065 * altitude))
                         mach_number = velocity / speed_of_sound
+
+                        # Grafik penceresi için son simülasyonun verileri
+                        self.last_sim = {
+                            "rho": r, "W": w, "S": wing_area, "AR": aspect_ratio,
+                            "e": oswald_efficiency,
+                            "k": 1 / (math.pi * aspect_ratio * oswald_efficiency),
+                            "cd0": cd_parasite,            # Cd - indüklenmiş sürükleme
+                            "cd_input": cd, "cl_input": cl,
+                            "eta": propulsion_efficiency, "wh": battery_capacity_wh,
+                            "mass": toplam_kitle, "velocity": velocity, "v_stall": v_stall,
+                        }
         
                         report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
                         report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
