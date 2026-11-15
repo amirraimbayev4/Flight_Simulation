@@ -200,6 +200,25 @@ def draw_range_figure(sim):
 
 
 
+# ==============================================================================
+# 🎨 DASHBOARD RENK PALETİ (sağ panel)
+# ==============================================================================
+UI = {
+    "panel": "#11151F", "card": "#171C28", "card_border": "#262D3D", "row_alt": "#1B2130",
+    "text": "#E5E7EB", "muted": "#8B93A7", "track": "#2A3144",
+    "green": "#34D399", "cyan": "#22D3EE", "amber": "#FBBF24", "red": "#F87171",
+    "violet": "#A78BFA", "blue": "#60A5FA", "orange": "#FB923C",
+    "green_bg": "#0F2A24", "red_bg": "#2A1517", "amber_bg": "#2A2210",
+    "blue_bg": "#10233A", "cyan_bg": "#0E2530",
+}
+
+
+def _font(size=12, weight="normal", family=None):
+    if family:
+        return ctk.CTkFont(family=family, size=size, weight=weight)
+    return ctk.CTkFont(size=size, weight=weight)
+
+
 class FlightSimulatorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -307,21 +326,37 @@ class FlightSimulatorGUI(ctk.CTk):
         # ------------------------------------------------------------------------------
         # SAĞ PANEL: DIJITAL EKRAN (OUTPUT PANEL)
         # ------------------------------------------------------------------------------
-        self.output_frame = ctk.CTkFrame(self.main_container, width=1000)
+        self.output_frame = ctk.CTkFrame(self.main_container, width=1000, fg_color=UI["panel"], corner_radius=14)
         self.output_frame.pack(side="right", fill="both", expand=True, padx=(15, 0), pady=10)
 
-        self.output_title = ctk.CTkLabel(self.output_frame, text="FLIGHT REPORT", font=ctk.CTkFont(size=16, weight="bold"), text_color="#FBBF24")
-        self.output_title.pack(padx=15, pady=15)
+        # Üst şerit: başlık + durum rozeti
+        self.output_header = ctk.CTkFrame(self.output_frame, fg_color="transparent")
+        self.output_header.pack(fill="x", padx=18, pady=(14, 6))
 
-        self.output_text = ctk.CTkTextbox(
-            self.output_frame, 
-            font=ctk.CTkFont(family="Consolas", size=12), 
-            fg_color="#1E1E1E", 
-            text_color="#10B981" 
+        self.output_title = ctk.CTkLabel(self.output_header, text="FLIGHT REPORT", font=_font(18, "bold"), text_color=UI["text"])
+        self.output_title.pack(side="left")
+
+        self.status_pill = ctk.CTkLabel(
+            self.output_header, text="READY", width=120, height=26, corner_radius=13,
+            font=_font(11, "bold"), text_color=UI["cyan"], fg_color=UI["cyan_bg"]
         )
-        self.output_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        self.output_text.insert("0.0", "Select a preset or enter core inputs manually, then press 'RUN SIMULATION'.\nIf takeoff conditions are met, advanced parameters will unlock dynamically!")
-        self.output_text.configure(state="disabled") 
+        self.status_pill.pack(side="right")
+
+        # Kartların çizildiği kaydırılabilir alan
+        self.dash = ctk.CTkScrollableFrame(self.output_frame, fg_color="transparent")
+        self.dash.pack(fill="both", expand=True, padx=8, pady=(0, 10))
+
+        self.report_text = ""   # "Save Report" için düz metin hali burada tutulur
+        self.render_dashboard({
+            "status": "idle",
+            "banner": ("🧭", "READY FOR TAKEOFF CHECK",
+                       "Select a preset or enter the core inputs, then press RUN FLIGHT SIMULATION."),
+            "notes": [("HOW IT WORKS", [
+                "1.  Core inputs decide if the aircraft can fly (lift, stall speed, Cl limit).",
+                "2.  If it can, advanced fields unlock: Cd, battery capacity and efficiency.",
+                "3.  Run again for the full report, then open RANGE GRAPH 📈.",
+            ], UI["cyan"])],
+        })
 
         # ==============================================================================
         # ALT PANEL: TETİKLEYİCİ BUTON (RUN BUTTON)
@@ -411,8 +446,8 @@ class FlightSimulatorGUI(ctk.CTk):
     # 📁 RAPORU BİLGİSAYARA KAYDETME FONKSİYONU
     # ==============================================================================
     def export_report_to_txt(self):
-        # Textbox içindeki yazıyı alıyoruz
-        report_content = self.output_text.get("0.0", "end")
+        # Ekrandaki kartlar yerine arka planda tuttuğumuz düz metin raporu kaydediyoruz
+        report_content = self.report_text
         if not self.report_ready:
             return
         else:
@@ -437,10 +472,139 @@ class FlightSimulatorGUI(ctk.CTk):
     # 📈 GRAFİK PENCERESİ
     # ==============================================================================
     def show_message(self, text):
-        self.output_text.configure(state="normal")
-        self.output_text.delete("0.0", "end")
-        self.output_text.insert("0.0", text)
-        self.output_text.configure(state="disabled")
+        # İlk paragraf başlık, kalanı açıklama olur
+        parts = text.strip().split("\n\n", 1)
+        lines = parts[1].split("\n") if len(parts) > 1 else []
+        self.render_dashboard({
+            "status": "warning",
+            "banner": ("⚠️", parts[0].strip().rstrip("."), "Press RUN FLIGHT SIMULATION to bring your report back."),
+            "notes": [("WHAT TO DO", [l for l in lines if l.strip()], UI["amber"])] if lines else [],
+        })
+
+    # ==============================================================================
+    # 🖥️ MODERN DASHBOARD (SAĞ PANEL) - kart çizen yardımcı metotlar
+    # ==============================================================================
+    def clear_dashboard(self):
+        for child in self.dash.winfo_children():
+            child.destroy()
+
+    def _card(self, border=None, fg=None):
+        card = ctk.CTkFrame(self.dash, fg_color=fg or UI["card"], corner_radius=12,
+                            border_width=1, border_color=border or UI["card_border"])
+        card.pack(fill="x", padx=6, pady=5)
+        return card
+
+    def add_banner(self, icon, title, subtitle, accent, bg):
+        card = self._card(border=accent, fg=bg)
+        ctk.CTkLabel(card, text=icon, font=_font(34)).pack(side="left", padx=(18, 10), pady=14)
+        box = ctk.CTkFrame(card, fg_color="transparent")
+        box.pack(side="left", fill="x", expand=True, pady=10, padx=(0, 12))
+        ctk.CTkLabel(box, text=title, font=_font(17, "bold"), text_color=accent,
+                     anchor="w", justify="left", wraplength=420).pack(fill="x")
+        ctk.CTkLabel(box, text=subtitle, font=_font(12), text_color=UI["muted"],
+                     anchor="w", justify="left", wraplength=420).pack(fill="x", pady=(2, 0))
+
+    def add_issue(self, title, detail, fix):
+        card = self._card(border=UI["red"], fg=UI["red_bg"])
+        ctk.CTkLabel(card, text="⚠  " + title, font=_font(13, "bold"), text_color=UI["red"],
+                     anchor="w", justify="left", wraplength=520).pack(fill="x", padx=16, pady=(12, 2))
+        ctk.CTkLabel(card, text=detail, font=_font(12), text_color=UI["text"],
+                     anchor="w", justify="left", wraplength=520).pack(fill="x", padx=16)
+        ctk.CTkLabel(card, text="💡  " + fix, font=_font(12), text_color=UI["amber"],
+                     anchor="w", justify="left", wraplength=520).pack(fill="x", padx=16, pady=(2, 12))
+
+    def add_metrics(self, metrics, columns=3):
+        grid = ctk.CTkFrame(self.dash, fg_color="transparent")
+        grid.pack(fill="x")
+        for c in range(columns):
+            grid.grid_columnconfigure(c, weight=1, uniform="metric")
+        for i, (label, value, unit, accent) in enumerate(metrics):
+            card = ctk.CTkFrame(grid, fg_color=UI["card"], corner_radius=12,
+                                border_width=1, border_color=UI["card_border"])
+            card.grid(row=i // columns, column=i % columns, padx=6, pady=5, sticky="nsew")
+            ctk.CTkLabel(card, text=label.upper(), font=_font(10, "bold"),
+                         text_color=UI["muted"]).pack(anchor="w", padx=14, pady=(12, 0))
+            ctk.CTkLabel(card, text=value, font=_font(26, "bold"),
+                         text_color=accent).pack(anchor="w", padx=14)
+            ctk.CTkLabel(card, text=unit, font=_font(11),
+                         text_color=UI["muted"]).pack(anchor="w", padx=14, pady=(0, 12))
+
+    def add_checks(self, checks):
+        card = self._card()
+        ctk.CTkLabel(card, text="FLIGHT SAFETY CHECKS", font=_font(11, "bold"),
+                     text_color=UI["muted"]).pack(anchor="w", padx=16, pady=(12, 2))
+        for label, value_text, hint, fraction, ok in checks:
+            color = UI["green"] if ok else UI["red"]
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=16, pady=6)
+            top = ctk.CTkFrame(row, fg_color="transparent")
+            top.pack(fill="x")
+            ctk.CTkLabel(top, text=("✔  " if ok else "✖  ") + label, font=_font(13, "bold"),
+                         text_color=color).pack(side="left")
+            ctk.CTkLabel(top, text=value_text, font=_font(13, "bold"),
+                         text_color=UI["text"]).pack(side="right")
+            bar = ctk.CTkProgressBar(row, height=8, corner_radius=4,
+                                     fg_color=UI["track"], progress_color=color)
+            bar.pack(fill="x", pady=(5, 3))
+            bar.set(max(0.0, min(1.0, fraction)))
+            ctk.CTkLabel(row, text=hint, font=_font(11), text_color=UI["muted"],
+                         anchor="w", justify="left", wraplength=520).pack(fill="x")
+        ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
+
+    def add_section(self, title, rows, accent):
+        card = self._card()
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.pack(fill="x", padx=16, pady=(12, 4))
+        ctk.CTkFrame(header, width=4, height=16, corner_radius=2, fg_color=accent).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(header, text=title, font=_font(12, "bold"), text_color=accent).pack(side="left")
+        for i, (label, value) in enumerate(rows):
+            row = ctk.CTkFrame(card, fg_color=UI["row_alt"] if i % 2 == 0 else "transparent", corner_radius=6)
+            row.pack(fill="x", padx=10, pady=1)
+            ctk.CTkLabel(row, text=label, font=_font(12), text_color=UI["muted"],
+                         anchor="w").pack(side="left", padx=8, pady=4)
+            ctk.CTkLabel(row, text=value, font=_font(12, "bold", "Consolas"), text_color=UI["text"],
+                         anchor="e").pack(side="right", padx=8, pady=4)
+        ctk.CTkFrame(card, height=6, fg_color="transparent").pack()
+
+    def add_note(self, title, lines, accent):
+        card = self._card()
+        ctk.CTkLabel(card, text=title, font=_font(11, "bold"), text_color=accent).pack(anchor="w", padx=16, pady=(12, 4))
+        for line in lines:
+            ctk.CTkLabel(card, text=line, font=_font(12), text_color=UI["text"],
+                         anchor="w", justify="left", wraplength=540).pack(fill="x", padx=16, pady=1)
+        ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
+
+    def render_dashboard(self, view):
+        styles = {
+            "idle":    ("READY",        UI["cyan"],   UI["cyan_bg"]),
+            "success": ("FLIGHT OK",    UI["green"],  UI["green_bg"]),
+            "failed":  ("CANNOT FLY",   UI["red"],    UI["red_bg"]),
+            "pending": ("INPUT NEEDED", UI["blue"],   UI["blue_bg"]),
+            "warning": ("CHECK INPUT",  UI["amber"],  UI["amber_bg"]),
+            "error":   ("ERROR",        UI["red"],    UI["red_bg"]),
+            "info":    ("INFO",         UI["cyan"],   UI["cyan_bg"]),
+        }
+        pill_text, accent, bg = styles[view["status"]]
+        self.clear_dashboard()
+        self.status_pill.configure(text=pill_text, text_color=accent, fg_color=bg)
+
+        icon, title, subtitle = view["banner"]
+        self.add_banner(icon, title, subtitle, accent, bg)
+        for issue_title, detail, fix in view.get("issues", []):
+            self.add_issue(issue_title, detail, fix)
+        if view.get("metrics"):
+            self.add_metrics(view["metrics"])
+        if view.get("checks"):
+            self.add_checks(view["checks"])
+        for sec_title, rows, sec_color in view.get("sections", []):
+            self.add_section(sec_title, rows, sec_color)
+        for note_title, lines, note_color in view.get("notes", []):
+            self.add_note(note_title, lines, note_color)
+
+        try:
+            self.dash._parent_canvas.yview_moveto(0)   # her yeni raporda en üste dön
+        except Exception:
+            pass
 
     def open_range_graph(self):
         # Grafik, tam raporun (Cd, Wh, verimlilik girilmiş) başarıyla çıkmış olmasını ister
@@ -532,6 +696,22 @@ class FlightSimulatorGUI(ctk.CTk):
             is_cl_valid = cl <= cl_max#Bunu eklememizin sebebi , eğer Cl değeri Cl max değerinden fazlaysa uçak stall olur ve uçak uçamaz.(Yeni bir bilgi daha öğrendim ve bunu eklemenin mantıklı olduğunu düşündüm.)
             is_speed_safe = velocity >= v_stall
 
+            # --- Dashboard (sağ panel) için ortak veriler ---
+            lift_ratio = Lift / w
+            speed_ratio = velocity / v_stall
+            cl_usage = cl / cl_max
+            checks = [
+                ("Lift vs. Weight", f"{lift_ratio:.2f}×",
+                 f"Lift {Lift:.1f} N  •  Weight {w:.1f} N  •  needs at least 1.00×", lift_ratio / 2, is_lift_enough),
+                ("Speed vs. Stall Speed", f"{velocity:.1f} m/s",
+                 f"Stall speed {v_stall:.1f} m/s ({v_stall * 3.6:.0f} km/h)  •  margin {speed_ratio:.2f}×", speed_ratio / 2, is_speed_safe),
+                ("Lift Coefficient Limit", f"{cl:.2f} / {cl_max:.2f}",
+                 f"Using {cl_usage * 100:.0f}% of the wing's maximum Cl", cl_usage, is_cl_valid),
+            ]
+            env_rows = [("Air Density (ρ)", f"{r:.4f} kg/m³"), ("Total Aircraft Weight (W)", f"{w:.2f} N")]
+            view = {"status": "info", "banner": ("", "", ""), "checks": checks,
+                    "sections": [("ENVIRONMENT & ATMOSPHERE", env_rows, UI["cyan"])]}
+
             report = ""
             report += "=============================================\n"
             report += "       ENVIRONMENT & ATMOSPHERE LAYER      \n"
@@ -561,6 +741,25 @@ class FlightSimulatorGUI(ctk.CTk):
                     report += "     FIX  : Lower Cl or use a higher-lift airfoil/flap.\n"
 
                 report += "\n-> Advanced parameters (Cd, Wh) locked due to flight failure.\n"
+
+                issues = []
+                if not is_lift_enough:
+                    issues.append(("Insufficient lift force", f"Short by {w - Lift:.2f} N.",
+                                   "Increase wing span, chord length, or velocity."))
+                if not is_speed_safe:
+                    issues.append(("Stall risk", f"Your speed ({velocity:.2f} m/s) is below the safety limit. "
+                                   f"Fly at least {v_stall:.2f} m/s ({v_stall * 3.6:.1f} km/h).",
+                                   "Increase velocity or wing area."))
+                if not is_cl_valid:
+                    issues.append(("Cl exceeds Cl_max", f"Cl ({cl}) is above Cl_max ({cl_max}). The wing would stall.",
+                                   "Lower Cl or use a higher-lift airfoil/flap."))
+                view.update({
+                    "status": "failed",
+                    "banner": ("❌", "THE AIRCRAFT CANNOT FLY", "Fix the issues below and run again."),
+                    "issues": issues,
+                    "notes": [("ADVANCED PARAMETERS LOCKED",
+                               ["Cd, battery capacity and efficiency unlock once all safety checks pass."], UI["amber"])],
+                })
                 report += "=============================================\n"
                 
             # EĞER UÇAK GÜVENLİCE UÇUYORSA (SUCCESS)    
@@ -579,6 +778,12 @@ class FlightSimulatorGUI(ctk.CTk):
                 self.update_idletasks()
 
                 if self.entries["Drag Coefficient (Cd)"].get() == "" or self.entries["Battery Capacity (Wh)"].get() == "" or self.entries["Propulsion Efficiency (0-1)"].get() == "":
+                    view.update({
+                        "status": "pending",
+                        "banner": ("🔓", "ADVANCED INPUTS UNLOCKED",
+                                   "Enter Cd, Battery Capacity and Propulsion Efficiency in the left panel, "
+                                   "then press RUN FLIGHT SIMULATION again for the full analysis."),
+                    })
                     report += "-> Advanced parameters (Cd, Wh) have been unlocked below!\n"
                     report += "-> ACTION REQUIRED: Please enter values for Cd and Wh in the left panel,\n"
                     report += "   then press 'RUN FLIGHT SIMULATION' again for full analytics.\n"
@@ -589,6 +794,10 @@ class FlightSimulatorGUI(ctk.CTk):
                     propulsion_efficiency = float(self.entries["Propulsion Efficiency (0-1)"].get())
                     
                     if not (0 < propulsion_efficiency <= 1):
+                                            view.update({
+                                                "status": "warning",
+                                                "banner": ("⚠️", "CHECK YOUR INPUT", "Propulsion efficiency must be between 0 and 1 (e.g., 0.70, not 70)."),
+                                            })
                                             report += "-> ERROR: Propulsion efficiency must be between 0 and 1 (e.g., 0.70, not 70).\n"
                                             report += "=============================================\n"
                     else:
@@ -648,6 +857,38 @@ class FlightSimulatorGUI(ctk.CTk):
                             "mass": toplam_kitle, "velocity": velocity, "v_stall": v_stall,
                         }
         
+                        view.update({
+                            "status": "success",
+                            "banner": ("🛫", "FLIGHT OK — ALL CHECKS PASSED",
+                                       "Modelled steady-flight checks passed: lift ≥ weight, speed ≥ stall speed, Cl ≤ Cl_max."),
+                            "metrics": [
+                                ("Flight Time", f"{flight_time_minutes:.0f}", f"minutes  ({flight_time_hours:.2f} h)", UI["cyan"]),
+                                ("Range (at your speed)", f"{range_km:.1f}", "km", UI["violet"]),
+                                ("Electrical Power", f"{power_electrical:.0f}", "watts", UI["amber"]),
+                                ("Lift Force", f"{Lift:.1f}", "newtons", UI["blue"]),
+                                ("Drag Force", f"{Drag:.2f}", "newtons", UI["orange"]),
+                                ("Stall Speed", f"{v_stall:.1f}", f"m/s  ({v_stall * 3.6:.0f} km/h)", UI["green"]),
+                            ],
+                            "sections": [
+                                ("ENVIRONMENT & ATMOSPHERE", env_rows + [
+                                    ("Static Ambient Pressure", f"{p_static:.2f} Pa"),
+                                    ("Bernoulli Total Pressure", f"{p_total:.2f} Pa")], UI["cyan"]),
+                                ("AERODYNAMICS & FLUID MECHANICS", [
+                                    ("Wing Loading (W/S)", f"{wing_loading:.2f} N/m²"),
+                                    ("Wing Aspect Ratio (AR)", f"{aspect_ratio:.2f}"),
+                                    ("Parasite Drag Coeff (Cd0)", f"{max(0.0, cd_parasite):.4f}"),
+                                    ("Induced Drag Coeff (Cdi)", f"{cd_induced:.4f}"),
+                                    ("Reynolds Number (Re)", f"{reynolds:,.0f}"),
+                                    ("Mach Number (M)", f"{mach_number:.4f}"),
+                                    ("Cruise Thrust Required (T)", f"{Drag:.2f} N")], UI["violet"]),
+                                ("ASSUMPTIONS USED", [
+                                    ("Max Lift Coefficient (Cl_max)", f"{cl_max:.2f}"),
+                                    ("Oswald Efficiency (e)", f"{oswald_efficiency:.2f}"),
+                                    ("Propulsion Efficiency (η)", f"{propulsion_efficiency:.2f}")], UI["amber"]),
+                            ],
+                            "notes": [("NEXT STEP", ["Press RANGE GRAPH 📈 to find the speed with the longest range and endurance."],
+                                       UI["violet"])],
+                        })
                         report += f"-> Static Ambient Pressure   : {p_static:.2f} Pa\n"
                         report += f"-> Bernoulli Total Pressure  : {p_total:.2f} Pa\n"
                         report += f"-> Wing Loading (W/S)        : {wing_loading:.2f} N/m²\n"
@@ -666,18 +907,17 @@ class FlightSimulatorGUI(ctk.CTk):
                         report += f"-> Propulsion Efficiency (eta)   : {propulsion_efficiency:.2f}\n"
                         report += "=============================================\n"                       
 
-            # Ekrana Raporu Basma
-            self.output_text.configure(state="normal")
-            self.output_text.delete("0.0", "end")
-            self.output_text.insert("0.0", report)
+            # Ekrana Raporu Basma (modern dashboard)
+            self.report_text = report
             self.report_ready = True
-            self.output_text.configure(state="disabled")
+            self.render_dashboard(view)
         except ValueError:
             self.report_ready = False
-            self.output_text.configure(state="normal")
-            self.output_text.delete("0.0", "end")
-            self.output_text.insert("0.0", "ERROR: Please make sure all input fields contain valid numerical values!")
-            self.output_text.configure(state="disabled")
+            self.render_dashboard({
+                "status": "error",
+                "banner": ("🚫", "INVALID INPUT",
+                           "Please make sure all input fields contain valid numerical values!"),
+            })
 
 if __name__ == "__main__":
     app = FlightSimulatorGUI()
