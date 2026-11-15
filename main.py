@@ -1,5 +1,7 @@
 import customtkinter as ctk
 import math
+import os
+from datetime import datetime
 from tkinter import filedialog
 
 # 1. Genel Tema Ayarları (Modern Karanlık Mod)
@@ -51,7 +53,7 @@ def draw_range_figure(sim):
     from matplotlib.figure import Figure
     import numpy as np
 
-    BG, PANEL, GRID = "#242424", "#1E1E1E", "#34373E"
+    BG, PANEL, GRID = "#0B0F19", "#11151F", "#2A3040"
     TEXT, MUTED = "#E5E7EB", "#9CA3AF"
     BLUE, GREEN, AMBER, RED = "#3B82F6", "#10B981", "#FBBF24", "#EF4444"
 
@@ -201,10 +203,325 @@ def draw_range_figure(sim):
 
 
 # ==============================================================================
+# ✈️ HAZIR UÇAK PROFİLLERİ (simülatör ve karşılaştırma sayfası ortak kullanır)
+# ==============================================================================
+PRESETS = {
+    "Delivery Drone (İHA)": {
+        "Altitude (m)": "100",
+        "Empty Weight (kg)": "3.5",
+        "Battery Weight (kg)": "2.0",
+        "Payload Weight (kg)": "1.5",
+        "Wing Span (m)": "2.2",       # 2.0 -> 2.2 m yapıldı
+        "Chord Length (m)": "0.28",     # 0.25 -> 0.28 m yapıldı (Kanat alanı büyüdü) Çünkü kod çalıştığında uçağ ağır geliyordu ve lift yetersizdi. Bu yüzden kanat alanını büyüttük.
+        "Velocity (m/s)": "20",         # 18 -> 20 m/s yapıldı
+        "Lift Coefficient (Cl)": "0.65",# 0.55 -> 0.65 yapıldı
+        "Drag Coefficient (Cd)": "0.035",
+        "Battery Capacity (Wh)": "300",
+        "Propulsion Efficiency (0-1)": "0.70"
+    },
+    "Electric Glider (Planör)": {
+        "Altitude (m)": "500",
+        "Empty Weight (kg)": "2.0",
+        "Battery Weight (kg)": "1.0",
+        "Payload Weight (kg)": "0.2",
+        "Wing Span (m)": "3.2",
+        "Chord Length (m)": "0.20",
+        "Velocity (m/s)": "15",
+        "Lift Coefficient (Cl)": "0.80",
+        "Drag Coefficient (Cd)": "0.020",
+        "Battery Capacity (Wh)": "150",
+        "Propulsion Efficiency (0-1)": "0.70"
+    }
+}
+
+
+# Yeni örnek konfigürasyonlar: modelde uçabildikleri ve birbirinden farklı bir ödünleşim
+# gösterdikleri kontrol edildi. Bunlar GERÇEK uçak değil, eğitim amaçlı örnek değerlerdir.
+PRESETS.update({
+    "Survey UAV (Haritalama)": {
+        "Altitude (m)": "300", "Empty Weight (kg)": "4.0", "Battery Weight (kg)": "2.5",
+        "Payload Weight (kg)": "1.0", "Wing Span (m)": "2.6", "Chord Length (m)": "0.30",
+        "Velocity (m/s)": "18", "Lift Coefficient (Cl)": "0.60", "Drag Coefficient (Cd)": "0.040",
+        "Battery Capacity (Wh)": "450", "Propulsion Efficiency (0-1)": "0.70"
+    },
+    "Endurance UAV (Uzun Süre)": {
+        "Altitude (m)": "1000", "Empty Weight (kg)": "3.0", "Battery Weight (kg)": "3.0",
+        "Payload Weight (kg)": "0.6", "Wing Span (m)": "4.0", "Chord Length (m)": "0.25",
+        "Velocity (m/s)": "14", "Lift Coefficient (Cl)": "0.85", "Drag Coefficient (Cd)": "0.022",
+        "Battery Capacity (Wh)": "540", "Propulsion Efficiency (0-1)": "0.72"
+    },
+    "Heavy Cargo UAV (Ağır Yük)": {
+        "Altitude (m)": "200", "Empty Weight (kg)": "9.0", "Battery Weight (kg)": "6.0",
+        "Payload Weight (kg)": "8.0", "Wing Span (m)": "3.4", "Chord Length (m)": "0.45",
+        "Velocity (m/s)": "22", "Lift Coefficient (Cl)": "0.70", "Drag Coefficient (Cd)": "0.050",
+        "Battery Capacity (Wh)": "1080", "Propulsion Efficiency (0-1)": "0.68"
+    },
+})
+
+
+# ==============================================================================
+# ⚖️ UÇAK KARŞILAŞTIRMA MOTORU (iki uçağı aynı modelle hesaplar)
+# ==============================================================================
+ADV_KEYS = ("Drag Coefficient (Cd)", "Battery Capacity (Wh)", "Propulsion Efficiency (0-1)")
+
+
+def compute_aircraft(p):
+    """p: simülatördeki kutularla aynı anahtarlara sahip sözlük. Sonuçları sözlük olarak döndürür."""
+    g = lambda key: float(str(p[key]).strip())
+    altitude = g("Altitude (m)")
+    empty_w, battery_w, payload_w = g("Empty Weight (kg)"), g("Battery Weight (kg)"), g("Payload Weight (kg)")
+    span, chord = g("Wing Span (m)"), g("Chord Length (m)")
+    velocity, cl = g("Velocity (m/s)"), g("Lift Coefficient (Cl)")
+
+    rho = 1.225 * (1 - 0.00002256 * altitude) ** 4.256
+    mass = empty_w + battery_w + payload_w
+    W = mass * 9.81
+    S = span * chord
+    AR = span / chord
+    lift = 0.5 * rho * velocity ** 2 * S * cl
+    cl_max = 1.5
+    v_stall = math.sqrt(2 * W / (rho * S * cl_max))
+
+    problems = []
+    if lift < W:
+        problems.append(f"Not enough lift (short by {W - lift:.1f} N)")
+    if velocity < v_stall:
+        problems.append(f"Below stall speed ({v_stall:.1f} m/s needed)")
+    if cl > cl_max:
+        problems.append(f"Cl above Cl_max ({cl_max})")
+
+    res = {"mass": mass, "payload": payload_w, "S": S, "AR": AR, "wing_loading": W / S,
+           "v_stall": v_stall, "problems": problems, "can_fly": not problems, "notes": []}
+    if problems:
+        return res
+
+    if not all(str(p.get(k, "")).strip() != "" for k in ADV_KEYS):
+        res["notes"].append("Cd, battery capacity and efficiency are needed for performance numbers.")
+        return res
+    cd, wh, eta = g("Drag Coefficient (Cd)"), g("Battery Capacity (Wh)"), g("Propulsion Efficiency (0-1)")
+    if not (0 < eta <= 1):
+        res["notes"].append("Propulsion efficiency must be between 0 and 1 (e.g., 0.70).")
+        return res
+
+    # --- Senin girdilerinle (simülatör raporundaki ile aynı hesap) ---
+    drag = 0.5 * rho * velocity ** 2 * S * cd
+    power = drag * velocity / eta
+    hours = wh / power
+    res.update(flight_min=hours * 60, range_km=velocity * hours * 3.6, power=power, ld=cl / cd)
+
+    # --- Optimum hız taraması (grafikteki düz uçuş modeli) ---
+    e = 0.85
+    k = 1 / (math.pi * AR * e)
+    cd0 = cd - k * cl ** 2
+    if cd0 <= 0.001:
+        res["notes"].append(f"Cd ({cd:g}) is not above the induced drag ({k * cl ** 2:.4f}), "
+                            "so optimized values are unavailable. Raise Cd or lower Cl.")
+        return res
+    v_max = max(velocity * 1.6, v_stall * 2.6)
+    n = 400
+    best_r, best_e = (0.0, v_stall), (0.0, v_stall)
+    for i in range(n):
+        v = v_stall + (v_max - v_stall) * i / (n - 1)
+        cl_req = 2 * W / (rho * v * v * S)
+        d = 0.5 * rho * v * v * S * (cd0 + k * cl_req ** 2)
+        hrs = wh / (d * v / eta)
+        if v * hrs * 3.6 > best_r[0]:
+            best_r = (v * hrs * 3.6, v)
+        if hrs * 60 > best_e[0]:
+            best_e = (hrs * 60, v)
+    res.update(best_range_km=best_r[0], v_best_range=best_r[1],
+               best_end_min=best_e[0], v_best_end=best_e[1],
+               wh_per_km=wh / best_r[0],
+               wh_per_payload_km=(wh / best_r[0] / payload_w) if payload_w > 0 else None)
+    res["sim"] = {"rho": rho, "W": W, "S": S, "AR": AR, "e": e, "k": k, "cd0": cd0, "eta": eta,
+                  "wh": wh, "mass": mass, "velocity": velocity, "v_stall": v_stall}
+    return res
+
+
+def draw_compare_figure(a, b, name_a, name_b):
+    from matplotlib.figure import Figure
+    import numpy as np
+
+    BG, PANEL, GRID = "#0B0F19", "#11151F", "#2A3040"
+    TEXT, MUTED = "#E5E7EB", "#9CA3AF"
+    CA, CB = "#3B82F6", "#A78BFA"
+
+    sweeps = [(build_speed_sweep(a["sim"]), CA, f"A · {name_a}"),
+              (build_speed_sweep(b["sim"]), CB, f"B · {name_b}")]
+
+    fig = Figure(figsize=(10, 7.4), dpi=100, facecolor=BG)
+    gs = fig.add_gridspec(2, 1, hspace=0.30, left=0.085, right=0.95, top=0.82, bottom=0.145)
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1], sharex=ax1)
+
+    for ax, key, ylabel in ((ax1, "range_km", "Range (km)"), (ax2, "minutes", "Endurance (min)")):
+        ax.set_facecolor(PANEL)
+        for sp in ax.spines.values():
+            sp.set_color(GRID)
+        ax.tick_params(colors=MUTED, labelsize=9)
+        ax.grid(True, color=GRID, alpha=0.7, linewidth=0.7)
+        ax.set_axisbelow(True)
+        ax.set_ylabel(ylabel, color=TEXT, fontsize=10.5, weight="bold")
+        top = 0
+        for s, col, label in sweeps:
+            ax.plot(s["v"], s[key], color=col, lw=2.8, label=label, zorder=3)
+            ax.fill_between(s["v"], s[key], color=col, alpha=0.08, zorder=2)
+            i = int(np.argmax(s[key]))
+            ax.scatter([s["v"][i]], [s[key][i]], s=240, marker="*", color=col,
+                       edgecolor=BG, linewidth=1.2, zorder=7)
+            ax.annotate(f"{s[key][i]:.0f} @ {s['v'][i]:.1f} m/s", xy=(s["v"][i], s[key][i]),
+                        xytext=(0, 13), textcoords="offset points", ha="center",
+                        color=col, fontsize=9.5, weight="bold", zorder=8)
+            top = max(top, float(s[key].max()))
+        ax.set_ylim(0, top * 1.28)
+
+    leg = ax1.legend(loc="upper right", facecolor=BG, edgecolor=GRID, fontsize=9.5, labelcolor=TEXT)
+    leg.set_zorder(10)
+    ax1.tick_params(labelbottom=False)
+    ax2.set_xlabel("Airspeed (m/s)", color=MUTED, fontsize=10.5)
+
+    fig.text(0.5, 0.945, "AIRCRAFT COMPARISON", ha="center", color=TEXT, fontsize=17, weight="bold")
+    fig.text(0.5, 0.905, "Range & endurance vs. airspeed  •  stars mark each aircraft's best speed",
+             ha="center", color=MUTED, fontsize=9.5)
+    fig.text(0.5, 0.04, "Each curve starts at that aircraft's own stall speed. Model: steady level flight, "
+             "Cd = Cd0 + k·Cl², Oswald e = 0.85 (assumed).", ha="center", color=MUTED, fontsize=8.5)
+    fig.text(0.5, 0.015, "Battery treated as 100% usable and avionics power ignored, so absolute values "
+             "are optimistic; compare the SHAPES and the RATIOS.", ha="center", color=MUTED,
+             fontsize=8.5, style="italic")
+    return fig
+
+
+# ==============================================================================
+# 🧾 KARŞILAŞTIRMA SATIRLARI (ekran ve dosya kaydı aynı veriyi kullanır)
+# ==============================================================================
+COMPARE_SPEC = [
+    ("DESIGN", None, None, None),
+    ("Total mass (kg)", "mass", "{:.2f}", None),
+    ("Payload (kg)", "payload", "{:.2f}", None),
+    ("Wing area (m²)", "S", "{:.2f}", None),
+    ("Aspect ratio", "AR", "{:.1f}", None),
+    ("Wing loading (N/m²)", "wing_loading", "{:.1f}", None),
+    ("Stall speed (m/s)", "v_stall", "{:.1f}", "low"),
+    ("AS CONFIGURED  (your speed and Cd)", None, None, None),
+    ("Flight time (min)", "flight_min", "{:.0f}", "high"),
+    ("Range (km)", "range_km", "{:.1f}", "high"),
+    ("Electrical power (W)", "power", "{:.0f}", "low"),
+    ("Lift-to-drag (Cl / Cd)", "ld", "{:.1f}", "high"),
+    ("OPTIMIZED SPEED  (level-flight model)", None, None, None),
+    ("Best-range speed (m/s)", "v_best_range", "{:.1f}", None),
+    ("Max range (km)", "best_range_km", "{:.0f}", "high"),
+    ("Best-endurance speed (m/s)", "v_best_end", "{:.1f}", None),
+    ("Max endurance (min)", "best_end_min", "{:.0f}", "high"),
+    ("Energy per km (Wh/km)", "wh_per_km", "{:.2f}", "low"),
+    ("Energy per payload kg·km (Wh)", "wh_per_payload_km", "{:.2f}", "low"),
+]
+
+# İki şeyi karşılaştırdığımız için "longer / lower" (en uzun / en düşük değil)
+VERDICT_SPEC = [
+    # (başlık, anahtar, yön, yedek anahtar, yedek başlık)  yedek: optimum hesaplanamazsa kendi hızındaki değer
+    ("Longer range", "best_range_km", "high", "range_km", "Longer range (at your speed)"),
+    ("Longer endurance", "best_end_min", "high", "flight_min", "Longer endurance (at your speed)"),
+    ("Lower energy per km", "wh_per_km", "low", None, None),
+    ("Lower energy per payload kg·km", "wh_per_payload_km", "low", None, None),
+    ("Lower stall speed", "v_stall", "low", None, None),
+]
+
+
+def _winner(a, b, key, better):
+    """İki uçağın aynı değerini kıyaslar: (kazanan harf, yüzde farkı) ya da None."""
+    va, vb = a.get(key), b.get(key)
+    if better is None or va is None or vb is None or va == vb:
+        return None
+    a_higher = va > vb
+    win = "A" if (a_higher if better == "high" else not a_higher) else "B"
+    w, l = (va, vb) if win == "A" else (vb, va)
+    if l == 0:
+        return win, "n/a"
+    pct = f"+{(w / l - 1) * 100:.0f}%" if better == "high" else f"−{(1 - w / l) * 100:.0f}%"
+    return win, pct
+
+
+def build_comparison_view(a, b):
+    verdict = []
+    for title, key, better, fb_key, fb_title in VERDICT_SPEC:
+        res = _winner(a, b, key, better)
+        if res is None and fb_key and (a.get(key) is None or b.get(key) is None):
+            res, title = _winner(a, b, fb_key, better), fb_title
+        if res:
+            verdict.append((title, res[0], res[1]))
+    w1, w2 = _winner(a, b, "wh_per_km", "low"), _winner(a, b, "wh_per_payload_km", "low")
+    insight = bool(w1 and w2 and w1[0] != w2[0])
+    rows = []
+    for label, key, fmt, better in COMPARE_SPEC:
+        if key is None:
+            rows.append(("section", label))
+            continue
+        va, vb = a.get(key), b.get(key)
+        ta = fmt.format(va) if va is not None else "—"
+        tb = fmt.format(vb) if vb is not None else "—"
+        win = _winner(a, b, key, better)
+        rows.append(("row", label, ta, tb, win[0] if win else None))
+    return {"verdict": verdict, "insight": insight, "rows": rows}
+
+
+INSIGHT_TEXT = ("'More efficient' depends on what you measure: one aircraft wins per km, "
+                "the other wins per kg of payload carried.")
+
+
+def build_comparison_text(a, b, name_a, name_b, params_a, params_b, field_keys):
+    view = build_comparison_view(a, b)
+    w1, w2 = 34, 30
+    short = lambda s: s if len(s) <= 26 else s[:25] + "…"
+    line = lambda x, y, z: f"{x:<{w1}}{y:<{w2}}{z:<{w2}}\n"
+    rule = "=" * (w1 + 2 * w2) + "\n"
+
+    out = "AIRCRAFT COMPARISON REPORT\n" + rule
+    out += f"Generated: {datetime.now():%Y-%m-%d %H:%M}\n\n"
+    out += line("", "A: " + short(name_a), "B: " + short(name_b))
+    out += "-" * (w1 + 2 * w2) + "\n"
+
+    out += "\nINPUTS\n"
+    for key in field_keys:
+        out += line("  " + key, params_a.get(key) or "—", params_b.get(key) or "—")
+
+    out += "\nSTATUS\n"
+    out += line("  Can it fly?", "yes" if a["can_fly"] else "NO", "yes" if b["can_fly"] else "NO")
+    for tag, res in (("A", a), ("B", b)):
+        for problem in res["problems"]:
+            out += f"  {tag}: {problem}\n"
+        for note in res["notes"]:
+            out += f"  {tag}: {note}\n"
+
+    out += "\nVERDICT\n"
+    if view["verdict"]:
+        for title, who, pct in view["verdict"]:
+            nm = name_a if who == "A" else name_b
+            out += f"  {title}: {who} · {nm} ({pct})\n"
+        if view["insight"]:
+            out += f"  Note: {INSIGHT_TEXT}\n"
+    else:
+        out += "  Not enough data for a verdict (both aircraft must fly and have Cd, battery and efficiency).\n"
+
+    out += "\nRESULTS   (▲ = better of the two)\n"
+    for row in view["rows"]:
+        if row[0] == "section":
+            out += f"\n  [{row[1].strip()}]\n"
+        else:
+            _, label, ta, tb, win = row
+            out += line("  " + label, ("▲ " if win == "A" else "") + ta, ("▲ " if win == "B" else "") + tb)
+
+    out += "\n" + "-" * (w1 + 2 * w2) + "\n"
+    out += ("Model: steady level flight, Cd = Cd0 + k·Cl², Oswald e = 0.85 (assumed), Cl_max = 1.5 (assumed).\n"
+            "Battery treated as 100% usable and avionics power ignored, so absolute values are optimistic;\n"
+            "compare the ratios, not the exact numbers.\n")
+    return out
+
+
+# ==============================================================================
 # 🎨 DASHBOARD RENK PALETİ (sağ panel)
 # ==============================================================================
 UI = {
-    "panel": "#11151F", "card": "#171C28", "card_border": "#262D3D", "row_alt": "#1B2130",
+    "bg": "#0B0F19", "field": "#0F1420", "panel": "#11151F", "card": "#171C28", "card_border": "#262D3D", "row_alt": "#1B2130",
     "text": "#E5E7EB", "muted": "#8B93A7", "track": "#2A3144",
     "green": "#34D399", "cyan": "#22D3EE", "amber": "#FBBF24", "red": "#F87171",
     "violet": "#A78BFA", "blue": "#60A5FA", "orange": "#FB923C",
@@ -224,25 +541,50 @@ class FlightSimulatorGUI(ctk.CTk):
         super().__init__()
 
         # Pencere Kimliği ve Genişletilmiş Boyutlar
-        self.title("Aerospace Technology - Flight Dynamics Simulator v1.2")
-        self.geometry("1200x800")  
+        self.title("AeroSim — Flight Dynamics Simulator")
+        self.configure(fg_color=UI["bg"])
+        self.geometry("1200x820")  
         self.resizable(False, False) 
 
         # ==============================================================================
-        # BAŞLIK ŞERİDİ (TOP BANNER)
+        # ✈️ MARKA ŞERİDİ (ince, modern başlık)
         # ==============================================================================
-        self.title_label = ctk.CTkLabel(
-            self, 
-            text="AIRCRAFT PERFORMANCE & AERODYNAMICS SIMULATOR", 
-            font=ctk.CTkFont(family="Helvetica", size=24, weight="normal"),
-            text_color="#3B82F6" 
-        )
-        self.title_label.pack(padx=20, pady=15)
+        self.header = ctk.CTkFrame(self, fg_color="transparent")
+        self.header.pack(fill="x", padx=24, pady=(14, 4))
+        ctk.CTkLabel(self.header, text="✈", width=40, height=40, corner_radius=12, fg_color="#2563EB",
+                     text_color="white", font=_font(20)).pack(side="left")
+        brand = ctk.CTkFrame(self.header, fg_color="transparent")
+        brand.pack(side="left", padx=12)
+        ctk.CTkLabel(brand, text="AeroSim", font=_font(20, "bold"), text_color=UI["text"],
+                     anchor="w").pack(anchor="w")
+        ctk.CTkLabel(brand, text="Aircraft performance & aerodynamics simulator", font=_font(11),
+                     text_color=UI["muted"], anchor="w").pack(anchor="w")
+        ctk.CTkLabel(self.header, text="v1.3", width=52, height=24, corner_radius=12, fg_color=UI["card"],
+                     text_color=UI["muted"], font=_font(11, "bold")).pack(side="right")
+
+        # ==============================================================================
+        # 📑 İKİ SAYFA: 1) Simulator   2) Compare
+        # ==============================================================================
+        self.tabs = ctk.CTkTabview(self, fg_color="transparent", corner_radius=14,
+                                   segmented_button_fg_color=UI["card"],
+                                   segmented_button_selected_color="#2563EB",
+                                   segmented_button_selected_hover_color="#1D4ED8",
+                                   segmented_button_unselected_color=UI["card"],
+                                   segmented_button_unselected_hover_color=UI["row_alt"],
+                                   text_color=UI["text"])
+        self.tabs.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        self.sim_tab = self.tabs.add("✈  Simulator")
+        self.cmp_tab = self.tabs.add("⚖  Compare")
+        try:
+            self.tabs._segmented_button.configure(font=_font(13, "bold"), height=34)
+        except Exception:
+            pass
 
         # ==============================================================================
         # HAZIR UÇAK PROFİLLERİ (PRESETS) SEÇİM ALANI
         # ==============================================================================
-        self.preset_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=8)
+        self.preset_frame = ctk.CTkFrame(self.sim_tab, fg_color=UI["card"], corner_radius=12,
+                                         border_width=1, border_color=UI["card_border"])
         self.preset_frame.pack(fill="x", padx=25, pady=(0, 10))
 
         self.preset_label = ctk.CTkLabel(
@@ -256,9 +598,12 @@ class FlightSimulatorGUI(ctk.CTk):
         # Hazır uçak seçenekleri
         self.preset_dropdown = ctk.CTkComboBox(
             self.preset_frame, 
-            values=["Custom (Manuel Giriş)", "Delivery Drone (İHA)", "Electric Glider (Planör)"],
+            values=["Custom (Manuel Giriş)"] + list(PRESETS),
             command=self.load_preset,
-            width=220
+            width=240, height=34,
+            fg_color=UI["field"], border_color=UI["card_border"],
+            button_color="#2563EB", button_hover_color="#1D4ED8",
+            dropdown_fg_color=UI["card"]
         )
         self.preset_dropdown.pack(side="left", padx=10, pady=10)
         self.preset_dropdown.set("Custom (Manuel Giriş)")
@@ -266,13 +611,16 @@ class FlightSimulatorGUI(ctk.CTk):
         # ==============================================================================
         # ANA PANEL (SOL GİRDİLER VE SAĞ SONUÇLAR)
         # ==============================================================================
-        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_container = ctk.CTkFrame(self.sim_tab, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=25, pady=5)
 
         # ------------------------------------------------------------------------------
         # SOL PANEL: GİRDİLER (INPUT PANEL)
         # ------------------------------------------------------------------------------
-        self.input_frame = ctk.CTkScrollableFrame(self.main_container, width=480, label_text="AIRCRAFT & ENVIRONMENT INPUTS")
+        self.input_frame = ctk.CTkScrollableFrame(
+            self.main_container, width=480, label_text="AIRCRAFT & ENVIRONMENT INPUTS",
+            fg_color=UI["panel"], corner_radius=14, label_fg_color=UI["card"],
+            label_text_color=UI["muted"], label_font=_font(11, "bold"))
         self.input_frame.pack(side="left", fill="y", expand=False, padx=(0, 15), pady=10)
 
         self.entries = {}
@@ -302,11 +650,12 @@ class FlightSimulatorGUI(ctk.CTk):
         # Temel girdileri ekrana çiziyoruz
         current_row = 0
         for label_text, placeholder_val in self.basic_fields:
-            lbl = ctk.CTkLabel(self.input_frame, text=label_text, font=ctk.CTkFont(size=13, weight="normal"))
+            lbl = ctk.CTkLabel(self.input_frame, text=label_text, font=_font(13), text_color=UI["text"])
             lbl.grid(row=current_row, column=0, padx=20, pady=8, sticky="w")
             self.labels[label_text] = lbl
             
-            entry = ctk.CTkEntry(self.input_frame, width=160, placeholder_text=placeholder_val)
+            entry = ctk.CTkEntry(self.input_frame, width=160, height=34, corner_radius=8, fg_color=UI["field"],
+                                 border_color=UI["card_border"], placeholder_text=placeholder_val)
             entry.grid(row=current_row, column=1, padx=20, pady=8, sticky="e")
             
             self.entries[label_text] = entry
@@ -315,7 +664,8 @@ class FlightSimulatorGUI(ctk.CTk):
         # Gelişmiş girdileri oluşturuyoruz
         for label_text, placeholder_val in self.advanced_fields:
             lbl = ctk.CTkLabel(self.input_frame, text=label_text, text_color="#FBBF24", font=ctk.CTkFont(size=13, weight="bold"))
-            entry = ctk.CTkEntry(self.input_frame, width=160, border_color="#FBBF24", placeholder_text=placeholder_val)
+            entry = ctk.CTkEntry(self.input_frame, width=160, height=34, corner_radius=8, fg_color=UI["field"],
+                                 border_color="#FBBF24", placeholder_text=placeholder_val)
             
             self.labels[label_text] = lbl
             self.entries[label_text] = entry
@@ -359,71 +709,42 @@ class FlightSimulatorGUI(ctk.CTk):
         })
 
         # ==============================================================================
-        # ALT PANEL: TETİKLEYİCİ BUTON (RUN BUTTON)
+        # ALT PANEL: AKSİYON ÇUBUĞU (RUN / SAVE / GRAPH, eşit hizalı)
         # ==============================================================================
+        self.action_bar = ctk.CTkFrame(self.sim_tab, fg_color="transparent")
+        self.action_bar.pack(side="bottom", fill="x", padx=25, pady=(4, 8))
+        for col, weight in enumerate((3, 2, 2)):
+            self.action_bar.grid_columnconfigure(col, weight=weight, uniform="act")
+
         self.run_button = ctk.CTkButton(
-            self, 
-            text="RUN FLIGHT SIMULATION", 
-            font=ctk.CTkFont(size=16, weight="bold"),
-            height=45,
-            fg_color="#2563EB", 
-            hover_color="#1D4ED8", 
+            self.action_bar, text="▶  RUN FLIGHT SIMULATION", font=_font(15, "bold"), height=46,
+            corner_radius=12, fg_color="#2563EB", hover_color="#1D4ED8",
             command=self.calculate_flight_physics
         )
-        self.run_button.pack(side="left", padx=20, pady=10)
+        self.run_button.grid(row=0, column=0, padx=(0, 8), sticky="ew")
         self.save_button = ctk.CTkButton(
-            self,
-            text="SAVE REPORT 💾",
-            font=ctk.CTkFont(size=16, weight="bold"),
-            height=45,
-            fg_color="#059669",
-            hover_color="#047857",
-            command=self.export_report_to_txt
+            self.action_bar, text="SAVE REPORT 💾", font=_font(15, "bold"), height=46, corner_radius=12,
+            fg_color="transparent", border_width=2, border_color=UI["green"], text_color=UI["green"],
+            hover_color=UI["green_bg"], command=self.export_report_to_txt
         )
-        self.save_button.pack(side="left", padx=20, pady=10)
+        self.save_button.grid(row=0, column=1, padx=8, sticky="ew")
         self.graph_button = ctk.CTkButton(
-            self,
-            text="RANGE GRAPH 📈",
-            font=ctk.CTkFont(size=16, weight="bold"),
-            height=45,
-            fg_color="#7C3AED",
-            hover_color="#6D28D9",
-            command=self.open_range_graph
+            self.action_bar, text="RANGE GRAPH 📈", font=_font(15, "bold"), height=46, corner_radius=12,
+            fg_color="#7C3AED", hover_color="#6D28D9", command=self.open_range_graph
         )
-        self.graph_button.pack(side="left", padx=20, pady=10)
+        self.graph_button.grid(row=0, column=2, padx=(8, 0), sticky="ew")
+
+        # Çubuk altta sabit kalsın: ana paneli çubuktan sonra yeniden yerleştir
+        self.main_container.pack_forget()
+        self.main_container.pack(fill="both", expand=True, padx=25, pady=5)
+
+        self.build_compare_tab()
 
     # ==============================================================================
     # ✈️ HAZIR UÇAK PROFİLLERİNİ YÜKLEME FONKSİYONU
     # ==============================================================================
     def load_preset(self, choice):
-        presets_data = {
-            "Delivery Drone (İHA)": {
-                "Altitude (m)": "100",
-                "Empty Weight (kg)": "3.5",
-                "Battery Weight (kg)": "2.0",
-                "Payload Weight (kg)": "1.5",
-                "Wing Span (m)": "2.2",       # 2.0 -> 2.2 m yapıldı
-                "Chord Length (m)": "0.28",     # 0.25 -> 0.28 m yapıldı (Kanat alanı büyüdü) Çünkü kod çalıştığında uçağ ağır geliyordu ve lift yetersizdi. Bu yüzden kanat alanını büyüttük.
-                "Velocity (m/s)": "20",         # 18 -> 20 m/s yapıldı
-                "Lift Coefficient (Cl)": "0.65",# 0.55 -> 0.65 yapıldı
-                "Drag Coefficient (Cd)": "0.035",
-                "Battery Capacity (Wh)": "300",
-                "Propulsion Efficiency (0-1)": "0.70"
-            },
-            "Electric Glider (Planör)": {
-                "Altitude (m)": "500",
-                "Empty Weight (kg)": "2.0",
-                "Battery Weight (kg)": "1.0",
-                "Payload Weight (kg)": "0.2",
-                "Wing Span (m)": "3.2",
-                "Chord Length (m)": "0.20",
-                "Velocity (m/s)": "15",
-                "Lift Coefficient (Cl)": "0.80",
-                "Drag Coefficient (Cd)": "0.020",
-                "Battery Capacity (Wh)": "150",
-                "Propulsion Efficiency (0-1)": "0.70"
-            }
-        }
+        presets_data = PRESETS
 
         if choice in presets_data:
             data = presets_data[choice]
@@ -467,6 +788,314 @@ class FlightSimulatorGUI(ctk.CTk):
         
         
 
+
+    # ==============================================================================
+    # ⚖️ KARŞILAŞTIRMA SAYFASI (2. sayfa): iki uçak da hazır seçilebilir ya da elle girilebilir
+    # ==============================================================================
+    CMP_BLANK = "Blank (enter your own)"
+    CMP_FIELDS = [
+        ("Altitude (m)", "Altitude (m)", "100"),
+        ("Empty Weight (kg)", "Empty weight (kg)", "3.5"),
+        ("Battery Weight (kg)", "Battery weight (kg)", "2.0"),
+        ("Payload Weight (kg)", "Payload (kg)", "1.5"),
+        ("Wing Span (m)", "Wing span (m)", "2.2"),
+        ("Chord Length (m)", "Chord (m)", "0.28"),
+        ("Velocity (m/s)", "Speed (m/s)", "20"),
+        ("Lift Coefficient (Cl)", "Lift coeff. Cl", "0.65"),
+        ("Drag Coefficient (Cd)", "Drag coeff. Cd", "0.035"),
+        ("Battery Capacity (Wh)", "Battery (Wh)", "300"),
+        ("Propulsion Efficiency (0-1)", "Efficiency (0-1)", "0.70"),
+    ]
+
+    def build_compare_tab(self):
+        tab = self.cmp_tab
+        self.cmp_entries = {"A": {}, "B": {}}
+        self.cmp_names = {}
+        self.cmp_data = None
+
+        # ---- Üst şerit: butonlar + durum yazısı ----
+        bar = ctk.CTkFrame(tab, fg_color=UI["card"], corner_radius=12, border_width=1, border_color=UI["card_border"])
+        bar.pack(fill="x", padx=6, pady=(8, 6))
+        self.cmp_button = ctk.CTkButton(bar, text="COMPARE ⚖", font=_font(14, "bold"), height=38, width=140,
+                                        corner_radius=10, fg_color="#2563EB", hover_color="#1D4ED8",
+                                        command=self.run_comparison)
+        self.cmp_button.pack(side="left", padx=(12, 8), pady=10)
+        self.cmp_graph_button = ctk.CTkButton(bar, text="OVERLAY GRAPH 📈", font=_font(14, "bold"), height=38, width=170,
+                                              corner_radius=10, fg_color="#7C3AED", hover_color="#6D28D9",
+                                              command=self.open_compare_graph)
+        self.cmp_graph_button.pack(side="left", padx=8, pady=10)
+        self.cmp_save_button = ctk.CTkButton(bar, text="SAVE COMPARISON 💾", font=_font(14, "bold"), height=38, width=190,
+                                             corner_radius=10, fg_color="transparent", border_width=2,
+                                             border_color=UI["green"], text_color=UI["green"],
+                                             hover_color=UI["green_bg"], command=self.save_comparison)
+        self.cmp_save_button.pack(side="left", padx=8, pady=10)
+        self.cmp_status = ctk.CTkLabel(bar, text="", font=_font(12), text_color=UI["muted"], anchor="e",
+                                       justify="right", wraplength=330)
+        self.cmp_status.pack(side="right", padx=14)
+
+        # ---- Kaydırılabilir alan: girdi kartları + sonuçlar ----
+        self.cmp_scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        self.cmp_scroll.pack(fill="both", expand=True, pady=(0, 4))
+
+        inputs = ctk.CTkFrame(self.cmp_scroll, fg_color="transparent")
+        inputs.pack(fill="x")
+        inputs.grid_columnconfigure(0, weight=1, uniform="cmpcard")
+        inputs.grid_columnconfigure(1, weight=1, uniform="cmpcard")
+        presets = list(PRESETS)
+        self._build_cmp_card(inputs, "A", UI["blue"], 0, presets[0])
+        self._build_cmp_card(inputs, "B", UI["violet"], 1, presets[min(1, len(presets) - 1)])
+
+        self.cmp_results = ctk.CTkFrame(self.cmp_scroll, fg_color="transparent")
+        self.cmp_results.pack(fill="x", pady=(4, 0))
+        self.cmp_message("Compare two aircraft side by side",
+                         ["Each aircraft starts from a preset, but every field is editable: change any value, "
+                          "or pick 'Blank' to type your own design.",
+                          "'⇩ Simulator' copies whatever is in the Simulator tab into that aircraft.",
+                          "Press COMPARE, then use OVERLAY GRAPH or SAVE COMPARISON (graph + values)."],
+                         UI["cyan"], "🧭")
+
+    def _build_cmp_card(self, parent, which, accent, column, default_preset):
+        card = ctk.CTkFrame(parent, fg_color=UI["card"], corner_radius=14, border_width=1, border_color=UI["card_border"])
+        card.grid(row=0, column=column, padx=6, pady=4, sticky="nsew")
+
+        head = ctk.CTkFrame(card, fg_color="transparent")
+        head.pack(fill="x", padx=14, pady=(12, 6))
+        ctk.CTkLabel(head, text=which, width=30, height=30, corner_radius=8, fg_color=accent,
+                     text_color=UI["bg"], font=_font(14, "bold")).pack(side="left")
+        name = ctk.CTkEntry(head, width=150, height=30, corner_radius=8, fg_color=UI["field"],
+                            border_color=UI["card_border"], placeholder_text="Aircraft name")
+        name.pack(side="left", padx=(10, 8))
+        self.cmp_names[which] = name
+        combo = ctk.CTkComboBox(head, values=list(PRESETS) + [self.CMP_BLANK], width=150, height=30,
+                                fg_color=UI["field"], border_color=UI["card_border"],
+                                button_color="#2563EB", button_hover_color="#1D4ED8",
+                                dropdown_fg_color=UI["card"],
+                                command=lambda choice, w=which: self.fill_cmp_preset(w, choice))
+        combo.pack(side="left")
+        combo.set("Load preset…")
+        ctk.CTkButton(head, text="⇩ Simulator", width=92, height=30, corner_radius=8, fg_color=UI["field"],
+                      border_width=1, border_color=UI["card_border"], hover_color=UI["row_alt"],
+                      font=_font(12), command=lambda w=which: self.copy_cmp_from_sim(w)).pack(side="right")
+
+        grid = ctk.CTkFrame(card, fg_color="transparent")
+        grid.pack(fill="x", padx=14, pady=(2, 12))
+        for c in (1, 3):
+            grid.grid_columnconfigure(c, weight=1)
+        for i, (key, short, hint) in enumerate(self.CMP_FIELDS):
+            r, c = divmod(i, 2)
+            advanced = key in ADV_KEYS
+            ctk.CTkLabel(grid, text=short, font=_font(11, "bold" if advanced else "normal"),
+                         text_color=UI["amber"] if advanced else UI["muted"],
+                         anchor="w").grid(row=r, column=c * 2, padx=(4, 6), pady=4, sticky="w")
+            entry = ctk.CTkEntry(grid, width=88, height=30, corner_radius=8, fg_color=UI["field"],
+                                 border_color=UI["amber"] if advanced else UI["card_border"],
+                                 placeholder_text=hint)
+            entry.grid(row=r, column=c * 2 + 1, padx=(0, 10), pady=4, sticky="e")
+            self.cmp_entries[which][key] = entry
+        self.fill_cmp_preset(which, default_preset)
+
+    def fill_cmp_preset(self, which, choice):
+        if choice in PRESETS:
+            values, name = PRESETS[choice], choice
+        elif choice == self.CMP_BLANK:
+            values, name = {}, f"Custom {which}"
+        else:
+            return
+        for key, entry in self.cmp_entries[which].items():
+            entry.delete(0, "end")
+            if key in values:
+                entry.insert(0, values[key])
+        self.cmp_names[which].delete(0, "end")
+        self.cmp_names[which].insert(0, name)
+
+    def copy_cmp_from_sim(self, which):
+        for key, entry in self.cmp_entries[which].items():
+            entry.delete(0, "end")
+            value = self.entries[key].get().strip() if key in self.entries else ""
+            if value:
+                entry.insert(0, value)
+        self.cmp_names[which].delete(0, "end")
+        self.cmp_names[which].insert(0, "My design")
+        self.set_cmp_status(f"Copied the Simulator inputs into Aircraft {which}.", UI["muted"])
+
+    def set_cmp_status(self, text, color=None):
+        self.cmp_status.configure(text=text, text_color=color or UI["muted"])
+
+    def _read_cmp(self, which):
+        params = {k: e.get().strip() for k, e in self.cmp_entries[which].items()}
+        name = self.cmp_names[which].get().strip() or f"Aircraft {which}"
+        return params, name
+
+    def cmp_message(self, title, lines, accent, icon="⚠️"):
+        for child in self.cmp_results.winfo_children():
+            child.destroy()
+        card = ctk.CTkFrame(self.cmp_results, fg_color=UI["card"], corner_radius=12,
+                            border_width=1, border_color=accent)
+        card.pack(fill="x", padx=6, pady=6)
+        ctk.CTkLabel(card, text=f"{icon}  {title}", font=_font(16, "bold"), text_color=accent,
+                     anchor="w").pack(fill="x", padx=18, pady=(14, 6))
+        for line in lines:
+            ctk.CTkLabel(card, text=line, font=_font(12), text_color=UI["text"], anchor="w",
+                         justify="left", wraplength=1000).pack(fill="x", padx=18, pady=1)
+        ctk.CTkFrame(card, height=10, fg_color="transparent").pack()
+
+    def run_comparison(self):
+        results, params_list, names = [], [], []
+        for which in ("A", "B"):
+            params, name = self._read_cmp(which)
+            try:
+                results.append(compute_aircraft(params))
+            except (ValueError, ZeroDivisionError):
+                self.cmp_data = None
+                self.cmp_message(f"Aircraft {which} has missing or invalid inputs",
+                                 ["Fill the first eight fields (altitude to Cl) with numbers; "
+                                  "wing span and chord must be above zero.",
+                                  "Cd, battery and efficiency are optional, but without them there are no "
+                                  "performance numbers."], UI["amber"])
+                return
+            params_list.append(params)
+            names.append(name)
+        self.cmp_data = (results[0], results[1], names[0], names[1], params_list[0], params_list[1])
+        self.set_cmp_status("")
+        self.render_comparison(*self.cmp_data[:4])
+
+    def render_comparison(self, a, b, name_a, name_b):
+        for child in self.cmp_results.winfo_children():
+            child.destroy()
+        CA, CB = UI["blue"], UI["violet"]
+        view = build_comparison_view(a, b)
+
+        # ---- Hüküm kartı ----
+        card = ctk.CTkFrame(self.cmp_results, fg_color=UI["card"], corner_radius=12,
+                            border_width=1, border_color=UI["card_border"])
+        card.pack(fill="x", padx=6, pady=5)
+        ctk.CTkLabel(card, text="VERDICT", font=_font(11, "bold"),
+                     text_color=UI["muted"]).pack(anchor="w", padx=16, pady=(12, 4))
+        if view["verdict"]:
+            for title, who, pct in view["verdict"]:
+                nm = name_a if who == "A" else name_b
+                row = ctk.CTkFrame(card, fg_color="transparent")
+                row.pack(fill="x", padx=16, pady=2)
+                ctk.CTkLabel(row, text=f"🏆  {title}", font=_font(13), text_color=UI["text"],
+                             anchor="w").pack(side="left")
+                ctk.CTkLabel(row, text=f"{who} · {nm}   ({pct})", font=_font(13, "bold"),
+                             text_color=CA if who == "A" else CB, anchor="e").pack(side="right")
+            if view["insight"]:
+                ctk.CTkLabel(card, text="💡  " + INSIGHT_TEXT, font=_font(12), text_color=UI["amber"],
+                             anchor="w", justify="left", wraplength=1000).pack(fill="x", padx=16, pady=(8, 2))
+        else:
+            ctk.CTkLabel(card, text="No verdict yet: both aircraft must fly and have Cd, battery capacity "
+                                    "and efficiency filled in.", font=_font(12), text_color=UI["muted"],
+                         anchor="w", justify="left", wraplength=1000).pack(fill="x", padx=16)
+        ctk.CTkFrame(card, height=10, fg_color="transparent").pack()
+
+        # ---- Karşılaştırma tablosu ----
+        table = ctk.CTkFrame(self.cmp_results, fg_color=UI["card"], corner_radius=12,
+                             border_width=1, border_color=UI["card_border"])
+        table.pack(fill="x", padx=6, pady=5)
+
+        def cell_row(left, va, vb, left_color=None, bold=False, bg=None, ca=None, cb=None):
+            row = ctk.CTkFrame(table, fg_color=bg or "transparent", corner_radius=6)
+            row.pack(fill="x", padx=10, pady=1)
+            ctk.CTkLabel(row, text=left, font=_font(12, "bold" if bold else "normal"),
+                         text_color=left_color or UI["muted"], anchor="w", width=330).pack(side="left", padx=8, pady=4)
+            ctk.CTkLabel(row, text=vb, font=_font(12, "bold", "Consolas"), text_color=cb or UI["text"],
+                         anchor="center", width=260).pack(side="right", padx=8, pady=4)
+            ctk.CTkLabel(row, text=va, font=_font(12, "bold", "Consolas"), text_color=ca or UI["text"],
+                         anchor="center", width=260).pack(side="right", padx=8, pady=4)
+
+        cell_row("", f"A · {name_a}", f"B · {name_b}", bold=True, ca=CA, cb=CB)
+        cell_row("Can it fly?", "✔ yes" if a["can_fly"] else "✖ no", "✔ yes" if b["can_fly"] else "✖ no",
+                 ca=UI["green"] if a["can_fly"] else UI["red"], cb=UI["green"] if b["can_fly"] else UI["red"])
+        for tag, res in (("A", a), ("B", b)):
+            for problem in res["problems"]:
+                cell_row(f"   ⚠ {tag}: {problem}", "", "", left_color=UI["red"])
+            for note in res["notes"]:
+                cell_row(f"   ℹ {tag}: {note}", "", "", left_color=UI["amber"])
+
+        i = 0
+        for row in view["rows"]:
+            if row[0] == "section":
+                ctk.CTkLabel(table, text=row[1], font=_font(11, "bold"), text_color=UI["cyan"],
+                             anchor="w").pack(fill="x", padx=18, pady=(12, 2))
+                i = 0
+                continue
+            _, label, ta, tb, win = row
+            ca = cb = UI["text"]
+            if win == "A":
+                ta, ca = "▲ " + ta, UI["green"]
+            elif win == "B":
+                tb, cb = "▲ " + tb, UI["green"]
+            cell_row(label, ta, tb, bg=UI["row_alt"] if i % 2 == 0 else None, ca=ca, cb=cb)
+            i += 1
+        ctk.CTkFrame(table, height=10, fg_color="transparent").pack()
+
+        try:
+            self.cmp_scroll._parent_canvas.yview_moveto(0.0)
+        except Exception:
+            pass
+
+    def open_compare_graph(self):
+        if self.cmp_data is None:
+            self.set_cmp_status("Press COMPARE first: the graph is drawn from the last comparison.", UI["amber"])
+            return
+        a, b, name_a, name_b = self.cmp_data[:4]
+        if "sim" not in a or "sim" not in b:
+            self.set_cmp_status("Graph needs both aircraft to fly with Cd, battery and efficiency filled in "
+                                "(and Cd above induced drag).", UI["amber"])
+            return
+        try:
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            fig = draw_compare_figure(a, b, name_a, name_b)
+        except ImportError:
+            self.set_cmp_status("matplotlib is missing:  pip install matplotlib", UI["amber"])
+            return
+
+        win = ctk.CTkToplevel(self)
+        win.configure(fg_color=UI["bg"])
+        win.title("Aircraft Comparison Graph")
+        win.geometry("1050x820")
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        ctk.CTkButton(win, text="SAVE GRAPH AS PNG 🖼️", font=_font(14, "bold"), height=38, corner_radius=10,
+                      fg_color="#059669", hover_color="#047857",
+                      command=lambda: self.save_graph_png(fig)).pack(pady=(0, 12))
+        win.after(200, win.lift)
+        win.focus()
+
+    def save_comparison(self):
+        if self.cmp_data is None:
+            self.set_cmp_status("Press COMPARE first: there is nothing to save yet.", UI["amber"])
+            return
+        a, b, name_a, name_b, params_a, params_b = self.cmp_data
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            initialfile="aircraft_comparison",
+            filetypes=[("Comparison report", "*.txt"), ("All Files", "*.*")],
+            title="Save comparison (creates a .txt with the values and a _graph.png)"
+        )
+        if not path:
+            return
+        base = os.path.splitext(path)[0]
+        text = build_comparison_text(a, b, name_a, name_b, params_a, params_b,
+                                     [key for key, _, _ in self.CMP_FIELDS])
+        with open(base + ".txt", "w", encoding="utf-8") as f:
+            f.write(text)
+        saved = [os.path.basename(base + ".txt")]
+
+        if "sim" in a and "sim" in b:
+            try:
+                fig = draw_compare_figure(a, b, name_a, name_b)
+                fig.savefig(base + "_graph.png", dpi=200, facecolor=fig.get_facecolor())
+                saved.append(os.path.basename(base + "_graph.png"))
+            except ImportError:
+                self.set_cmp_status(f"✔ Saved {saved[0]}. The graph needs matplotlib (pip install matplotlib).", UI["amber"])
+                return
+            self.set_cmp_status("✔ Saved: " + "  +  ".join(saved), UI["green"])
+        else:
+            self.set_cmp_status(f"✔ Saved {saved[0]}. No graph: both aircraft must fly and have Cd, battery "
+                                "and efficiency filled in.", UI["amber"])
 
     # ==============================================================================
     # 📈 GRAFİK PENCERESİ
@@ -635,6 +1264,7 @@ class FlightSimulatorGUI(ctk.CTk):
             return
 
         win = ctk.CTkToplevel(self)
+        win.configure(fg_color=UI["bg"])
         win.title("Range & Endurance Analysis")
         win.geometry("1050x840")
 
