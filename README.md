@@ -18,6 +18,11 @@ The project is designed for students and beginners interested in aerospace engin
 - Endurance vs. Airspeed graph
 - Visually updated graphical user interface
 - Additional flight calculations unlocked when the aircraft meets the basic flight condition
+- Various pre-set aircraft profiles
+- Comparison between two aircraft<img width="1043" height="845" alt="Ekran Görüntüsü (53)" src="https://github.com/user-attachments/assets/f8265c60-5783-455d-b358-3549e0ea51b8" />
+<img width="1196" height="850" alt="Ekran Görüntüsü (51)" src="https://github.com/user-attachments/assets/2e1dce46-a42a-402f-9ffd-b4e9e3cb58ef" />
+<img width="1194" height="852" alt="Comparioson" src="https://github.com/user-attachments/assets/e452ec15-6d43-483c-9a87-96c0e168c018" />
+
 
 ## 3. How It Works
 
